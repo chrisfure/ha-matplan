@@ -608,6 +608,7 @@ async function loadShop() {
   let d;
   try { d = await api("shopping"); } catch (e) { el.innerHTML = `<div class="card job err">${esc(e.message)}</div>`; return; }
   state.shop = d;
+  try { d.inbox = (await api("shopping/inbox")).lists.filter((l) => l.items.length || l.error); } catch (_) { d.inbox = []; }
   // valgt-tilstand: alle forslag som ikke står på lista er forhåndsvalgt
   state.shopSel = new Map();
   d.suggestions.forEach((s) => { if (!s.on_list && !s.bered_fill) state.shopSel.set(s.name, { cat: s.category, price: s.avg_price }); });
@@ -616,6 +617,21 @@ async function loadShop() {
   renderShop();
   loadOdaPrices();
 }
+
+// Hent varer fra andre lister (f.eks. Google Keep) til handlelista
+$("#shop").addEventListener("click", async (e) => {
+  const b = e.target.closest("button[data-inbox]");
+  if (!b) return;
+  const l = state.shop.inbox[+b.dataset.inbox];
+  const items = $$(`input[data-inb="${b.dataset.inbox}"]:checked`).map((x) => x.value);
+  if (!items.length) return toast("Velg minst én vare");
+  b.disabled = true;
+  try {
+    const r = await api("shopping/import", { body: { entity_id: l.entity_id, items } });
+    toast(`${r.added.length} hentet til handlelista${r.skipped.length ? ` (${r.skipped.length} sto der fra før)` : ""}`, 4000);
+    loadShop();
+  } catch (err) { toast(err.message); b.disabled = false; }
+});
 
 // Dagens Oda-pris og tilbud for forslagene og handlelista (bufres på serveren i 6 timer)
 async function loadOdaPrices() {
@@ -689,6 +705,11 @@ function renderShop() {
 
   const extra = [...sel.keys()].filter((n) => !d.suggestions.some((s) => s.name === n) && !d.from_plan.includes(n));
   el.innerHTML = `${noTodo}${todoErr}
+    ${(d.inbox || []).map((l, li) => `<div class="card ecocard inbox">
+      <div class="eco-h"><h3>📥 Fra ${esc(l.name)} (${l.items.length})</h3></div>
+      ${l.error ? `<div class="hint">Kunne ikke lese lista: ${esc(l.error)}</div>` : `<div class="list">${l.items.map((it) => `<label class="row"><input type="checkbox" data-inb="${li}" value="${esc(it)}" checked><div class="main">${esc(it)}</div></label>`).join("")}</div>
+      <button class="primary wide" data-inbox="${li}">Hent ${l.items.length} til handlelista</button>`}
+    </div>`).join("")}
     <div class="shop-grid"><div class="col">
     <div class="card controls">
       <div class="seg" id="shop-sort">
@@ -1702,6 +1723,7 @@ function renderGuide() {
         <li>🔒 Matplan <b>bestiller aldri</b> – den legger bare i kurven. Levering og bestilling gjør du selv i Oda-appen.</li>
         <li><b>Priser:</b> «Oda nå» er dagens Oda-pris (🏷 = tilbud, med vanlig pris). «Dere betaler vanligvis» er snittet fra kvitteringene.</li>
         <li><b>⚖️ Sammenlign priser</b> viser hva handlelista koster i Kiwi, Rema, Coop, Meny osv. (via Kassalapp). Billigst er markert.</li>
+        <li><b>📥 Fra Google Keep:</b> har dere koblet en Keep-liste (Mer → Innstillinger → «Hent varer fra andre lister»), vises varene øverst. Trykk <b>Hent til handlelista</b>, og send så videre til Oda som vanlig.</li>
         <li><b>✕ på handlelista</b> fjerner varen helt (ikke bare huker av), så den ikke havner i Oda. <b>Tøm lista</b> fjerner alt.</li>
         <li><b>✕ på et forslag:</b> «Ikke nå» skjuler det til neste gang, «Aldri foreslå» skjuler det for godt.</li>
         <li>I Oda-vinduet: <b>🗑 Fjern fra lista</b> eller <b>Hopp over</b> for ting du ikke vil ha i kurven.</li>
@@ -1797,6 +1819,12 @@ async function loadSettings() {
       <summary id="s-cal-sum"></summary>
       <div class="dd-body">${ents.calendar.map((c) => `<label class="row"><input type="checkbox" class="s-cal" value="${esc(c.entity_id)}" data-name="${esc(c.name)}" ${cals.includes(c.entity_id) ? "checked" : ""}><div class="main">${esc(c.name)}</div></label>`).join("")}</div>
     </details>
+    <label class="field">Hent varer fra andre lister<small>F.eks. en Google Keep-liste (via integrasjonen «Google Keep Sync»). Varene vises øverst på Handle, og hentes til handlelista når dere trykker.</small></label>
+    <details class="dropdown" id="s-imp-dd">
+      <summary id="s-imp-sum"></summary>
+      <div class="dd-body">${ents.todo.filter((t) => t.entity_id !== s.todo_entity).map((t) => `<label class="row"><input type="checkbox" class="s-imp" value="${esc(t.entity_id)}" data-name="${esc(t.name)}" ${(s.import_lists || []).includes(t.entity_id) ? "checked" : ""}><div class="main">${esc(t.name)} <small style="color:var(--muted)">${esc(t.entity_id)}</small></div></label>`).join("") || `<div class="row"><div class="main info">Ingen andre lister i Home Assistant ennå.</div></div>`}</div>
+    </details>
+    <label class="row" style="padding:10px 0 0"><input type="checkbox" id="s-imprm" ${s.import_remove !== false ? "checked" : ""}><div class="main">Fjern varene fra den andre lista når de er hentet</div></label>
     <label class="field">Husstanden<small>Hvem er dere, og hvilken kalender hører til hvem? Hjelper AI-en å forstå hvem som er hjemme.</small>
       <textarea id="s-house" placeholder="F.eks.: Kari og Ola (voksne), Emma og Jonas (barn). Kalenderen «Kari og Ola» er felles.">${esc(s.household)}</textarea></label>
     <label class="field">Preferanser og allergier<small>F.eks. «fisk to ganger i uka», «ingen nøtter», «barna liker ikke sterk mat».</small>
@@ -1814,6 +1842,12 @@ async function loadSettings() {
   };
   calSum();
   $("#s-cal-dd").addEventListener("change", calSum);
+  const impSum = () => {
+    const sel = $$(".s-imp:checked").map((c) => c.dataset.name);
+    $("#s-imp-sum").textContent = sel.length ? `${sel.length} valgt: ${sel.join(", ")}` : "Ingen";
+  };
+  impSum();
+  $("#s-imp-dd").addEventListener("change", impSum);
   $("#s-save").onclick = async () => {
     try {
       await api("settings", { body: {
@@ -1823,6 +1857,7 @@ async function loadSettings() {
         household: $("#s-house").value, preferences: $("#s-pref").value,
         dinner_time: $("#s-time").value, shop_horizon: +$("#s-hor").value,
         dinner_calendar: $("#s-dcal").value, write_calendar: $("#s-wcal").checked,
+        import_lists: $$(".s-imp:checked").map((c) => c.value), import_remove: $("#s-imprm").checked,
       } });
       state.writeCal = $("#s-wcal").checked;
       state.me = await api("state");

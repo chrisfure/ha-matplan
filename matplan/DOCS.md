@@ -27,6 +27,17 @@ Appen dukker opp som **Matplan** i sidemenyen, og alle brukere i Home Assistant 
 
 Første henting går gjennom historikken (365 dager som standard), og det kan ta noen minutter. Etter det sjekkes e-posten hvert 15. minutt.
 
+## Handleliste fra Google Keep (valgfritt)
+
+Bruker dere en handleliste i Google Keep, kan varene hentes inn i Matplan med ett trykk:
+
+1. Installer integrasjonen **Google Keep Sync** fra HACS (github.com/watkins-matt/home-assistant-google-keep-sync) og velg Keep-lista. Den blir en gjøremålsliste i Home Assistant, med synk begge veier (Keep → HA hvert 15. minutt). Integrasjonen trenger en token med tilgang til hele Keep-kontoen, så det tryggeste er en egen Google-konto som Keep-lista deles med.
+2. I Matplan: **Mer → Innstillinger → Hent varer fra andre lister**, kryss av for Keep-lista.
+3. Varene vises da øverst på **Handle** («📥 Fra …»). Trykk **Hent til handlelista**. Varer som allerede står der, hoppes over, og de hentede fjernes fra Keep-lista (kan slås av).
+4. Trykk **🛒 Legg i Oda-handlekurven** som vanlig.
+
+Hentingen skjer bare når dere trykker – aldri automatisk.
+
 ## Oda-handlekurv (valgfritt)
 
 1. I Home Assistant går du til **Innstillinger → Apper → Matplan → Konfigurasjon** og trykker «Vis ubrukte valgfrie».

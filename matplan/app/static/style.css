@@ -515,3 +515,4 @@ input.bamt { width: 64px; margin: 0; padding: 6px 8px; flex: none; }
 details.guests { margin-top: 10px; }
 .gcount { display: flex; justify-content: space-between; align-items: center; padding: 4px 0; }
 .learned { margin: -2px 0 8px; }
+.inbox { margin-bottom: 12px; } .inbox .list { margin: 0 -14px 10px; }

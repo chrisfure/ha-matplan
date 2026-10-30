@@ -95,6 +95,8 @@ DEFAULT_SETTINGS = {
     "dinner_calendar": "",      # tom = finn kalender som heter «Middag»
     "write_calendar": True,     # skriv valgte middager inn i middagskalenderen
     "receipt_email": "",        # adresse familien videresender kvitteringer til (vises i bruksanvisningen)
+    "import_lists": [],         # andre gjøremålslister (f.eks. Google Keep) det kan hentes varer fra
+    "import_remove": True,      # fjern varene fra kildelista etter henting
 }
 
 

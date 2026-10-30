@@ -302,6 +302,49 @@ def api_shopping(req, body):
     }
 
 
+@route("GET", "/api/shopping/inbox")
+def api_shopping_inbox(req, body):
+    """Varer som ligger i andre lister (f.eks. Google Keep) og kan hentes til handlelista."""
+    todo = db.get_setting("todo_entity")
+    out = []
+    for ent in db.get_setting("import_lists") or []:
+        if not ent or ent == todo:
+            continue
+        try:
+            items = ha.todo_items(ent)
+            name = next((s["attributes"].get("friendly_name", ent) for s in ha.states() if s["entity_id"] == ent), ent)
+            out.append({"entity_id": ent, "name": name, "items": items})
+        except Exception as e:
+            out.append({"entity_id": ent, "name": ent, "items": [], "error": str(e)})
+    return {"lists": out}
+
+
+@route("POST", "/api/shopping/import")
+def api_shopping_import(req, body):
+    """Flytter valgte varer fra en annen liste til handlelista (bare når dere trykker – aldri automatisk)."""
+    todo = db.get_setting("todo_entity")
+    src = body.get("entity_id")
+    if not todo:
+        raise ApiError("Velg handleliste under Mer → Innstillinger først")
+    if src not in (db.get_setting("import_lists") or []) or src == todo:
+        raise ApiError("Ukjent liste")
+    items = [i for i in (body.get("items") or []) if isinstance(i, str) and i.strip()]
+    on_list = logic.on_list_matcher(ha.todo_items(todo))
+    added, skipped = [], []
+    for it in items:
+        if on_list(it):
+            skipped.append(it)
+        else:
+            ha.todo_add(todo, it.strip())
+            added.append(it)
+    if db.get_setting("import_remove") and items:
+        try:
+            ha.todo_remove(src, items)
+        except Exception as e:
+            log.warning("Kunne ikke fjerne fra %s: %s", src, e)
+    return {"added": added, "skipped": skipped}
+
+
 @route("POST", "/api/shopping/remove")
 def api_shopping_remove(req, body):
     """Fjerner varer helt fra handlelista i Home Assistant."""
