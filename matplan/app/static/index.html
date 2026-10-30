@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="nb">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Matplan</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top">
+  <div class="brand"><span class="logo">🍽</span> Matplan</div>
+  <div class="who" id="who"></div>
+</header>
+
+<main>
+  <!-- MIDDAG -->
+  <section id="tab-middag" class="tab active">
+    <div class="card controls">
+      <div class="seg" id="days-seg">
+        <button data-days="1">I dag</button>
+        <button data-days="3" class="on">3 dager</button>
+        <button data-days="7">Uke</button>
+      </div>
+      <input id="wish" type="text" placeholder="Ønsker? F.eks. «noe med kylling» eller «taco fredag»">
+      <button class="primary wide" id="btn-plan">Lag middagsforslag</button>
+      <div class="job" id="plan-job" hidden></div>
+    </div>
+    <div id="plan"></div>
+    <h2 class="sub">Middager vi har hatt</h2>
+    <div id="meals" class="card list"></div>
+    <button class="ghost wide" id="btn-calsync">📅 Oppdater fra middagskalenderen</button>
+    <button class="ghost wide" id="btn-addmeal">+ Registrer middag manuelt</button>
+  </section>
+
+  <!-- HANDLELISTE -->
+  <section id="tab-handle" class="tab">
+    <div id="shop"></div>
+  </section>
+
+  <!-- KVITTERINGER -->
+  <section id="tab-kvitt" class="tab">
+    <div class="seg mobonly ecoseg"><button data-go="kvitt" class="on">🧾 Kvitteringer</button><button data-go="okonomi">📊 Økonomi</button></div>
+    <div class="card upload">
+      <label class="primary wide filebtn">📷 Ta bilde av kvittering
+        <input type="file" accept="image/*" capture="environment" id="file-cam" hidden>
+      </label>
+      <label class="ghost wide filebtn">📄 Last opp bilder / PDF
+        <input type="file" accept="image/*,application/pdf" multiple id="file-up" hidden>
+      </label>
+      <div class="job" id="up-job" hidden></div>
+      <div id="mailbox"></div>
+    </div>
+    <h2 class="sub">Kvitteringer</h2>
+    <div class="card controls">
+      <input id="rc-q" type="search" placeholder="Søk etter vare eller butikk, f.eks. «melk»">
+      <div class="two">
+        <select id="rc-store"><option value="">Alle butikker</option></select>
+        <select id="rc-sort">
+          <option value="date_desc">Nyeste først</option>
+          <option value="date_asc">Eldste først</option>
+          <option value="store">Butikk</option>
+          <option value="total">Største beløp</option>
+        </select>
+      </div>
+    </div>
+    <div id="rc-summary" class="hint"></div>
+    <div class="rc-grid">
+      <div id="receipts"></div>
+      <div id="rc-detail" class="card rc-detail" hidden></div>
+    </div>
+  </section>
+
+  <!-- ØKONOMI -->
+  <section id="tab-okonomi" class="tab">
+    <div class="seg mobonly ecoseg"><button data-go="kvitt">🧾 Kvitteringer</button><button data-go="okonomi" class="on">📊 Økonomi</button></div>
+    <div id="eco"></div>
+  </section>
+
+  <!-- LAGER -->
+  <section id="tab-lager" class="tab">
+    <div class="seg mobonly ecoseg"><button data-go="lager" class="on">🥫 Lager</button><button data-go="beredskap">🛟 Beredskap</button></div>
+    <div class="card controls">
+      <div class="pbar">
+        <input id="pantry-q" type="search" placeholder="Søk i lageret">
+        <details class="pmenu" id="pantry-menu">
+          <summary aria-label="Visning og sortering">☰ <span id="pantry-view-lbl">Status</span></summary>
+          <div class="pmenu-body" id="pantry-menu-body"></div>
+        </details>
+      </div>
+      <button class="ghost wide" id="pantry-add">+ Legg til varer</button>
+    </div>
+    <div id="pantry"></div>
+  </section>
+
+  <!-- BEREDSKAP -->
+  <section id="tab-beredskap" class="tab">
+    <div class="seg mobonly ecoseg"><button data-go="lager">🥫 Lager</button><button data-go="beredskap" class="on">🛟 Beredskap</button></div>
+    <div id="bered"></div>
+  </section>
+
+  <!-- MER: bruksanvisning og innstillinger -->
+  <section id="tab-innst" class="tab">
+    <div class="card controls">
+      <div class="seg" id="more-seg">
+        <button data-m="guide">📖 Bruksanvisning</button>
+        <button data-m="settings">⚙️ Innstillinger</button>
+      </div>
+    </div>
+    <div id="guide"></div>
+    <div class="card form" id="settings"></div>
+    <div id="storealert"></div>
+  </section>
+</main>
+
+<nav class="tabs">
+  <button data-tab="middag" class="on"><span>🍲</span>Middag</button>
+  <button data-tab="handle"><span>🛒</span>Handle</button>
+  <button data-tab="kvitt"><span>🧾</span>Kvitteringer</button>
+  <button data-tab="okonomi" class="wideonly"><span>📊</span>Økonomi</button>
+  <button data-tab="lager"><span>🥫</span>Lager</button>
+  <button data-tab="beredskap" class="wideonly"><span>🛟</span>Beredskap</button>
+  <button data-tab="innst"><span>☰</span>Mer</button>
+</nav>
+
+<dialog id="modal"><div id="modal-body"></div></dialog>
+<div id="toast" hidden></div>
+
+<script src="app.js"></script>
+</body>
+</html>

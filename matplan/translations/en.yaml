@@ -1,0 +1,28 @@
+configuration:
+  imap_enabled:
+    name: Hent kvitteringer fra e-post
+    description: Leser e-poster i en IMAP-mappe (f.eks. Gmail-etiketten «Matplan»).
+  imap_host:
+    name: IMAP-server
+    description: For Gmail er dette imap.gmail.com
+  imap_user:
+    name: E-postadresse
+  imap_password:
+    name: App-passord
+    description: For Gmail må du lage et app-passord (krever totrinnsbekreftelse). Ikke bruk vanlig passord.
+  imap_folder:
+    name: Mappe / etikett
+    description: Navnet på Gmail-etiketten kvitteringene havner i.
+  imap_interval_minutes:
+    name: Hvor ofte (minutter)
+  imap_since_days:
+    name: Hent e-post fra siste antall dager
+    description: Første gang hentes historikk så langt tilbake. 365 gir ett år med Oda-kvitteringer.
+  oda_email:
+    name: Oda – e-post
+    description: Brukes bare til å legge varer i Oda-handlekurven. Matplan kan aldri bestille.
+  oda_password:
+    name: Oda – passord
+  kassalapp_api_key:
+    name: Kassalapp – API-nøkkel
+    description: Gratis nøkkel fra kassal.app/api. Brukes til å sammenligne priser mellom kjedene.

@@ -1,0 +1,22 @@
+configuration:
+  imap_enabled:
+    name: Hent e-post
+    description: Slå på for å lese e-post fra barnehagen automatisk
+  imap_host:
+    name: IMAP-server
+  imap_user:
+    name: E-postadresse
+  imap_password:
+    name: App-passord
+    description: App-passord fra myaccount.google.com/apppasswords (ikke det vanlige passordet)
+  imap_folder:
+    name: Mappe eller etikett
+    description: INBOX, eller en Gmail-etikett
+  imap_sender:
+    name: Avsender
+    description: Bare e-post fra denne adressen eller dette domenet leses (f.eks. barnehagen.no). Påkrevd.
+  imap_interval_minutes:
+    name: Sjekk hvert (minutter)
+  imap_since_days:
+    name: Les tilbake (dager)
+    description: Hvor langt tilbake det sjekkes etter e-post
