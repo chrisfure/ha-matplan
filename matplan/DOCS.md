@@ -78,6 +78,14 @@ Trykk **Beredskap** øverst i fanen Lager (på PC i menyen). Lista følger råde
 
 Les mer på [sikkerhverdag.no](https://www.sikkerhverdag.no/din-beredskap/).
 
+## Ultraprosessert mat
+
+Varer som trolig er ultraprosessert, får merket **UP** i Lager og på Handle. Bearbeidet kjøtt («Bearb. kjøtt») og mye sukker merkes også. Trykk på varen for å se hvorfor, og et **bedre alternativ**, for eksempel vann eller farris i stedet for brus, havregryn i stedet for søte frokostblandinger, naturell yoghurt med bær i stedet for smaksatt, grovt brød i stedet for loff, og fisk i ovnen i stedet for fiskepinner.
+
+- **Grunnlag:** merkingen bygger på NOVA-systemet, som brukes internasjonalt for ultraprosessert mat. Alternativene følger de norske kostrådene (Helsedirektoratet 2024, basert på de nordiske næringsstoffanbefalingene NNR 2023) og WHO: mer grønnsaker, frukt, bær, belgfrukter, fisk og grove kornvarer; mindre bearbeidet kjøtt, sukker og salt; vann som tørstedrikk; velg Nøkkelhull-merket. Kostrådene bruker ikke selve begrepet «ultraprosessert», og WHO arbeider med en egen retningslinje. Der NOVA og kostrådene spriker (for eksempel myk margarin og fiskeboller), følger appen kostrådene og markerer ikke varen.
+- **Uten AI:** vurderingen gjøres ut fra varenavnet. Er merket feil, trykker du *Ikke ultraprosessert* eller *Merk som ultraprosessert* på varen.
+- **Økonomi → Helse** viser hvor stor del av matpengene de siste tre månedene som går til ultraprosessert mat, og de største postene med alternativ.
+
 ## PC og mobil
 
 Appen tilpasser seg skjermen. På PC kommer menyen i sidekanten. Middagsdagene vises i et rutenett, og forslag og handleliste står side om side. Lageret kan vises som en tabell (☰ → Liste) som sorteres ved å klikke på kolonnetitlene, og kvitteringene åpnes i et eget felt ved siden av listen.

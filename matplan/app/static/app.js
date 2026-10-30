@@ -632,9 +632,10 @@ function renderShop() {
   const sRow = (s) => {
     const [lbl, cls] = dueLabel(s);
     return `<label class="row"><input type="checkbox" data-name="${esc(s.name)}" data-cat="${esc(s.category)}" ${s.on_list ? "disabled" : sel.has(s.name) ? "checked" : ""}>
-      <div class="main"><div class="name">${esc(s.name)}${s.on_list ? "" : `<span class="badge ${cls === "bad" ? "" : cls === "warn" ? "" : "soft"}">${esc(lbl)}</span>`}${state.odaPrices?.[s.name]?.discount ? `<span class="badge deal">Tilbud</span>` : ""}</div>
+      <div class="main"><div class="name">${esc(s.name)}${hBadge(s)}${s.on_list ? "" : `<span class="badge ${cls === "bad" ? "" : cls === "warn" ? "" : "soft"}">${esc(lbl)}</span>`}${state.odaPrices?.[s.name]?.discount ? `<span class="badge deal">Tilbud</span>` : ""}</div>
       <div class="info">${s.on_list ? "Står allerede på lista" : esc(s.reason)}</div>
       ${s.bered && !s.bered_fill ? `<div class="info bered">🛟 ${esc(s.bered)}</div>` : ""}
+      ${s.health && !s.health.cleared && s.health.tags.length ? `<div class="info halt">💡 Bedre: ${esc(s.health.alt)}</div>` : ""}
       ${priceLine(s.name, s.avg_price, s.prices) ? `<div class="info price">${esc(priceLine(s.name, s.avg_price, s.prices))}</div>` : ""}</div>
       ${s.on_list ? "" : `<button type="button" class="x" data-dismiss="${s.id}" data-dname="${esc(s.name)}" aria-label="Fjern forslag">✕</button>`}</label>`;
   };
@@ -694,7 +695,7 @@ function renderShop() {
     $("#shop-regs").innerHTML = `<div class="info" style="padding:4px 14px 0;color:var(--muted);font-size:13px">Vanlige varer – trykk for å velge</div>` +
       Object.keys(groups).sort((a, b) => aisleIdx(a) - aisleIdx(b)).map((c) => `
         <div class="chipcat">${esc(c)}</div>
-        <div class="chips">${groups[c].map((r) => `<button data-reg="${esc(r.name)}" data-cat="${esc(r.category)}" class="${sel.has(r.name) ? "sel" : ""}" ${r.on_list ? "disabled title='Står på lista'" : ""}>${esc(r.name)}</button>`).join("")}</div>`).join("");
+        <div class="chips">${groups[c].map((r) => `<button data-reg="${esc(r.name)}" data-cat="${esc(r.category)}" class="${sel.has(r.name) ? "sel" : ""} ${r.health && r.health.upf && !r.health.cleared ? "upf" : ""}" ${r.on_list ? "disabled title='Står på lista'" : ""}>${esc(r.name)}</button>`).join("")}</div>`).join("");
   };
   const update = () => {
     const n = sel.size;
@@ -1292,7 +1293,7 @@ const stBtn = (p, status, label) => `<button data-p="${p.id}" data-s="${status}"
 // én linje per vare: navn (+ rytme), status og knappene som passer for gruppa
 function pantryLine(p, acts = "", extra = "") {
   return `<div class="pl">
-    <div class="pl-n click" data-edit="${p.id}">${esc(p.name)}${p.bered ? `<span class="bmark" title="Del av beredskapslageret">🛟</span>` : ""}${extra ? `<small>${extra}</small>` : ""}${p.ignore ? `<small>· foreslås ikke</small>` : ""}</div>
+    <div class="pl-n click" data-edit="${p.id}">${esc(p.name)}${p.bered ? `<span class="bmark" title="Del av beredskapslageret">🛟</span>` : ""}${hBadge(p)}${extra ? `<small>${extra}</small>` : ""}${p.ignore ? `<small>· foreslås ikke</small>` : ""}</div>
     <span class="pl-s ${p.in_stock ? "" : "out"}">${stockTxt(p)}</span>
     ${acts ? `<div class="pill2">${acts}</div>` : ""}
   </div>`;
@@ -1400,7 +1401,7 @@ function pantryInfo(p) {
 function pantryRow(p) {
   return `
     <div class="row">
-      <div class="main click" data-edit="${p.id}"><div class="name">${esc(p.name)}${p.bered ? `<span class="bmark" title="Del av beredskapslageret">🛟</span>` : ""}${p.use_soon ? `<span class="badge">bruk snart</span>` : ""}${p.rhythm ? `<span class="badge soft">${p.rhythm}</span>` : ""}${p.ignore ? `<span class="badge">foreslås ikke</span>` : ""}</div>
+      <div class="main click" data-edit="${p.id}"><div class="name">${esc(p.name)}${p.bered ? `<span class="bmark" title="Del av beredskapslageret">🛟</span>` : ""}${hBadge(p)}${p.use_soon ? `<span class="badge">bruk snart</span>` : ""}${p.rhythm ? `<span class="badge soft">${p.rhythm}</span>` : ""}${p.ignore ? `<span class="badge">foreslås ikke</span>` : ""}</div>
         <div class="info">${esc(pantryInfo(p))}</div></div>
       <div class="pill2">
         <button data-p="${p.id}" data-s="${p.override === "har" ? "" : "har"}" class="${p.override === "har" ? "on-har" : ""}">Har</button>
@@ -1453,7 +1454,7 @@ function renderPantryTable(el, list) {
     <tbody>${list.map((p) => {
       const pr = p.prices || {};
       return `<tr>
-        <td class="click" data-edit="${p.id}"><b>${esc(p.name)}</b>${p.bered ? `<span class="bmark" title="Del av beredskapslageret">🛟</span>` : ""}${p.use_soon ? `<span class="badge">bruk snart</span>` : ""}${p.rhythm ? `<span class="badge soft">${p.rhythm}</span>` : ""}${p.ignore ? `<span class="badge">foreslås ikke</span>` : ""}</td>
+        <td class="click" data-edit="${p.id}"><b>${esc(p.name)}</b>${p.bered ? `<span class="bmark" title="Del av beredskapslageret">🛟</span>` : ""}${hBadge(p)}${p.use_soon ? `<span class="badge">bruk snart</span>` : ""}${p.rhythm ? `<span class="badge soft">${p.rhythm}</span>` : ""}${p.ignore ? `<span class="badge">foreslås ikke</span>` : ""}</td>
         <td>${esc(p.category)}</td>
         <td class="num">${p.q90}×</td>
         <td class="num">${pr.avg90 ? krU(pr.avg90, pr.unit) : (p.avg_price ? kr2(p.avg_price) : "–")}<small>${trendTxt(pr.trend)}</small></td>
@@ -1567,6 +1568,12 @@ function editProduct(p) {
   modal(`
     <h3>${esc(p.name)}</h3>
     ${p.bered ? `<div class="card job bnote">🛟 <b>Del av beredskapslageret</b> (${esc(p.bered.name)}): hold minst ${numTxt(p.bered.need)} ${esc(p.bered.unit)}, har ${numTxt(p.bered.have)}. Bruk den eldste først, så fornyes beredskapen hver gang dere handler. <a href="#" id="e-bered">Se beredskap ›</a></div>` : ""}
+    ${p.health && !p.health.cleared && p.health.tags.length ? `<div class="card job hnote">
+      <div><b>⚠️ ${esc(p.health.labels.join(" · "))}</b>${p.health.manual ? " <small>(merket av dere)</small>" : ""}</div>
+      <div>${esc(p.health.why)}</div>
+      <div class="halt">💡 <b>Bedre alternativ:</b> ${esc(p.health.alt)}</div>
+      <div class="hacts"><button class="small ghost" data-upf="0">Ikke ultraprosessert</button>${p.health.manual ? `<button class="small ghost" data-upf="auto">Automatisk</button>` : ""}</div>
+    </div>` : `<div class="hacts" style="margin:-4px 0 10px">${p.health && p.health.cleared ? `<small class="hint">Merket som ikke ultraprosessert.</small> <button class="small ghost" data-upf="auto">Automatisk</button>` : `<button class="small ghost" data-upf="1">Merk som ultraprosessert</button>`}</div>`}
     <div class="stats">
       <div><b>${p.q90}×</b><span>per kvartal</span></div>
       <div><b>${p.interval ? "hver " + Math.round(p.interval) + ". dag" : "–"}</b><span>rytme</span></div>
@@ -1585,6 +1592,12 @@ function editProduct(p) {
     <label class="row" style="padding:14px 0 0"><input type="checkbox" id="e-ign" ${p.ignore ? "checked" : ""}><div class="main">Ikke foreslå på handlelista</div></label>
     <div class="modal-acts"><button class="ghost" id="m-cancel">Avbryt</button><button class="primary" id="m-save">Lagre</button></div>
   `, (m) => {
+    $$("[data-upf]", m).forEach((b) => b.onclick = async () => {
+      const v = b.dataset.upf === "auto" ? null : b.dataset.upf === "1";
+      await api("products/" + p.id, { body: { upf: v } });
+      closeModal(); await loadPantry();
+      const np = state.pantry.find((x) => x.id === p.id); if (np) editProduct(np);
+    });
     const eb = $("#e-bered", m); if (eb) eb.onclick = (ev) => { ev.preventDefault(); closeModal(); showTab("beredskap"); };
     $("#m-cancel", m).onclick = closeModal;
     $("#m-save", m).onclick = async () => {
@@ -1683,6 +1696,14 @@ function renderGuide() {
         <li><b>☰-menyen</b> bytter visning: <b>Sted i huset</b> (kjøleskap, fryser, skap …, med en stripe som viser omtrent hvor mye som er igjen) eller <b>Liste</b> med alle varer – velg sortering over lista, og snu rekkefølgen med pila (tabell på PC).</li>
         <li><b>+ Legg til varer</b> for ting uten kvittering. Kategori settes automatisk.</li>
         <li>Trykk på en vare for priser (snitt per kg/l/stk, billigst/dyrest, prisgraf), rytme og for å endre navn, kategori eller holdbarhet.</li>
+      </ul>`),
+    sec("🥦 Ultraprosessert mat", `
+      <ul>
+        <li>Varer som trolig er <b>ultraprosessert</b> (pølser, chips, brus, kjeks, ferdigpizza, søte frokostblandinger, smaksatt yoghurt o.l.) får merket <b>UP</b> i Lager og på Handle. Bearbeidet kjøtt og mye sukker merkes også.</li>
+        <li>Trykk på varen for å se hvorfor og et <b>bedre alternativ</b> etter kostrådene – f.eks. vann i stedet for brus, havregryn i stedet for søt frokostblanding.</li>
+        <li>Er merket feil, trykk <b>Ikke ultraprosessert</b> (eller <b>Merk som ultraprosessert</b>).</li>
+        <li><b>Økonomi → Helse</b> viser hvor stor del av matpengene som går til ultraprosessert mat.</li>
+        <li>Vurderingen er ut fra varenavnet, uten AI. Den bygger på NOVA-systemet; der kostrådene sier noe annet (f.eks. myk margarin og fiskeboller), følger appen kostrådene.</li>
       </ul>`),
     sec("🛟 Beredskap", `
       <ul>
@@ -1959,6 +1980,13 @@ function renderEconomy() {
             <span>Kan spare ca. ${kr(t.per_month)} i måneden.</span></div>`).join("")}
           <p class="hint">Sammenlignet per ${"kg, liter eller stk"} når pakningsstørrelsen står på kvitteringen. Tilbud kan forklare noen av de lave prisene.</p>
         </div>` : ""}
+        ${e.health && e.health.food_spent ? `<div class="card ecocard">
+          <div class="eco-h"><h3>🥦 Helse</h3><small>siste 3 mnd</small></div>
+          ${shareRow("Ultraprosessert mat", `${kr(e.health.upf_spent)} · ${e.health.upf_share} %`, e.health.upf_share, "av det dere har brukt på mat")}
+          ${e.health.meat_spent ? `<div class="srow-s" style="margin-bottom:6px">Bearbeidet kjøtt: ${kr(e.health.meat_spent)}</div>` : ""}
+          ${e.health.top.length ? `<div class="toplist">${e.health.top.map((t) => `<div class="htop"><span><b>${esc(t.name)}</b> <small>${esc(t.labels.join(", "))}</small><br><span class="halt">💡 ${esc(t.alt)}</span></span><span>${kr(t.spent)}</span></div>`).join("")}</div>` : `<p class="hint">Ingen ultraprosesserte varer funnet 👏</p>`}
+          <p class="hint">Merket etter NOVA-systemet. Alternativene følger de norske kostrådene og WHO: mer grønnsaker, frukt, belgfrukter, fisk og grove kornvarer, mindre bearbeidet kjøtt, sukker og salt, og vann som tørstedrikk.</p>
+        </div>` : ""}
         <div class="card ecocard">
           <div class="eco-h"><h3>Hva pengene går til</h3><small>siste 3 mnd</small></div>
           ${e.categories.slice(0, 10).map((x) => shareRow(esc(x.category), `${kr(x.sum)} · ${x.share} %`, x.share)).join("")}
@@ -2025,6 +2053,13 @@ async function loadBered() {
   try { state.bered = await api("beredskap"); renderBered(); } catch (e) { toast(e.message); }
 }
 
+// helse: merke for ultraprosessert / bearbeidet kjøtt / mye sukker
+const hBadge = (p) => {
+  const h = p && p.health;
+  if (!h || h.cleared || !h.tags.length) return "";
+  const t = h.upf ? "UP" : h.tags.includes("meat") ? "Bearb. kjøtt" : "Sukker";
+  return `<span class="hbadge ${h.upf ? "" : "soft"}" title="${esc(h.labels.join(", "))}">${t}</span>`;
+};
 const fmtDateY = (d) => d ? new Date(d + "T12:00").toLocaleDateString("nb-NO", { day: "numeric", month: "short", year: "numeric" }) : "";
 const numTxt = (n) => String(Math.round(n * 10) / 10).replace(".", ",");
 const bStep = (i) => i.unit === "liter" && i.need >= 20 ? 5 : (i.unit === "kg" || i.unit === "liter") ? 0.5 : 1;

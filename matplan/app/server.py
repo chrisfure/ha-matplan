@@ -288,6 +288,9 @@ def api_shopping(req, body):
                 for m in f.get("mangler", []):
                     if not on_list(m) and m not in missing:
                         missing.append(m)
+    import health
+    health.annotate(sugg)
+    health.annotate(regulars)
     return {
         "suggestions": sugg,
         "hidden_on_list": hidden,
@@ -444,6 +447,8 @@ def api_pantry(req, body):
         b = blinks.get(x["id"])
         if b:
             x["bered"] = b
+    import health
+    health.annotate(stats)
     return stats
 
 
@@ -713,6 +718,9 @@ def api_pantry_set(req, body):
 
 @route("POST", r"/api/products/(\d+)")
 def api_product(req, body, pid):
+    if "upf" in body:  # True/False = merket av dere, None = automatisk
+        import health
+        health.set_override(int(pid), body["upf"])
     if "ignore" in body:
         db.ex("UPDATE products SET ignore=? WHERE id=?", (1 if body["ignore"] else 0, pid))
     if body.get("category"):

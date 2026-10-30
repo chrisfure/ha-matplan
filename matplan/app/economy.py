@@ -174,6 +174,22 @@ def compute(window=6):
                 "per_month": round(pr["spent90"] / 3 * pct / 100),
             })
     pricier.sort(key=lambda x: -x["trend"])
+
+    # helse: andel av matpengene som går til ultraprosessert mat (siste 3 mnd)
+    import health
+    health.annotate(stats)
+    food90 = [s for s in stats if s.get("spent_90") and s.get("food", True) and s["category"] not in NON_FOOD]
+    tot90 = sum(s["spent_90"] for s in food90) or 0
+    upf90 = [s for s in food90 if (s.get("health") or {}).get("upf")]
+    meat90 = [s for s in food90 if "meat" in ((s.get("health") or {}).get("tags") or [])]
+    health_info = {
+        "food_spent": round(tot90),
+        "upf_spent": round(sum(s["spent_90"] for s in upf90)),
+        "upf_share": round(100 * sum(s["spent_90"] for s in upf90) / tot90) if tot90 else 0,
+        "meat_spent": round(sum(s["spent_90"] for s in meat90)),
+        "top": [{"id": s["id"], "name": s["name"], "spent": s["spent_90"], "labels": s["health"]["labels"],
+                 "alt": s["health"]["alt"]} for s in sorted(upf90 + [m for m in meat90 if m not in upf90], key=lambda s: -s["spent_90"])[:8]],
+    }
     savings.sort(key=lambda x: -x["per_month"])
 
     b = budget()
@@ -200,6 +216,7 @@ def compute(window=6):
                  "trend": (s.get("prices") or {}).get("trend")} for s in top],
         "pricier": pricier[:8],
         "savings": savings[:8],
+        "health": health_info,
         "budget": b,
         "budget_left": b - round(m_cur["total"]) if b else None,
         "sensor": SENSOR,

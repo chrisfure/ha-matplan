@@ -437,7 +437,7 @@ em.up { font-style: normal; color: #c0392b; } em.down { font-style: normal; colo
 .srow-s { font-size: 12px; color: var(--muted); margin-top: 3px; }
 .toplist > div { display: flex; justify-content: space-between; gap: 8px; font-size: 14px; padding: 7px 0; border-bottom: 1px solid var(--line); }
 .toplist > div:last-child { border-bottom: 0; }
-.toplist > div span:last-child { color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.toplist > div > span:last-child { color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
 .tip { font-size: 14px; padding: 8px 0; border-bottom: 1px solid var(--line); line-height: 1.45; }
 .tip span { display: block; color: var(--accent); font-size: 13px; margin-top: 2px; }
 .budget { position: relative; height: 12px; background: var(--chip); border-radius: 6px; overflow: visible; margin: 6px 0 8px; }
@@ -491,3 +491,19 @@ em.up { font-style: normal; color: #c0392b; } em.down { font-style: normal; colo
 .bnote a { color: inherit; }
 @media (prefers-color-scheme: dark) { .info.bered, .blink { color: #8cc4e6 !important; } .bnote { background: #1b3240; color: #cfe6f5; } }
 .field small a { color: var(--accent); }
+/* helse */
+.hbadge { font-size: 10.5px; font-weight: 650; padding: 1px 6px; border-radius: 999px; background: #fde2cf; color: #9a4a12; margin-left: 6px; vertical-align: 1px; letter-spacing: .02em; }
+.hbadge.soft { background: var(--chip); color: var(--muted); }
+.hnote { background: #fdf0e6; color: #6b3a14; font-size: 14px; margin: 0 0 12px; display: flex; flex-direction: column; gap: 6px; }
+.halt { color: #2f7d5b; }
+.hnote .halt { color: #285f45; }
+.hacts { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.hacts button { min-height: 32px; padding: 3px 10px; font-size: 13px; }
+.chips button.upf::after { content: "UP"; font-size: 9px; font-weight: 700; margin-left: 5px; color: #9a4a12; }
+.htop small { color: var(--muted); }
+.htop .halt { font-size: 13px; }
+@media (prefers-color-scheme: dark) {
+  .hbadge { background: #4a2a14; color: #f5b98c; } .hnote { background: #33241a; color: #f2d6c0; } .hnote .halt, .halt { color: #8fd1b0; }
+  .chips button.upf::after { color: #f5b98c; }
+}
+.htop > span:first-child { flex: 1; min-width: 0; }

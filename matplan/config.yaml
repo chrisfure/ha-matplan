@@ -1,5 +1,5 @@
 name: Matplan
-version: "0.14.2"
+version: "0.15.0"
 slug: matplan
 description: Kvitteringer, handleliste og middagsforslag ut fra det dere har og kalenderen
 arch:
