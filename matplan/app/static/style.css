@@ -507,3 +507,7 @@ em.up { font-style: normal; color: #c0392b; } em.down { font-style: normal; colo
   .chips button.upf::after { color: #f5b98c; }
 }
 .htop > span:first-child { flex: 1; min-width: 0; }
+.bchip { background: #e8f2f8 !important; color: #1d4f6d !important; }
+input.bamt { width: 64px; margin: 0; padding: 6px 8px; flex: none; }
+@media (prefers-color-scheme: dark) { .bchip { background: #1b3240 !important; color: #cfe6f5 !important; } }
+.bunit { color: var(--muted); font-size: 13px; min-width: 32px; }

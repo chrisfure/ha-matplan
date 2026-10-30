@@ -304,6 +304,7 @@ def compute():
         "expiring": [i for i in out if i["expiring"]],
         "missing": [i for i in active if i["status"] != "ok"],
         "categories": cats,
+        "rotation": _rotation_info(),
         "candidates": [{"id": p["id"], "name": p["name"], "category": p["category"]} for p in sorted(stats, key=lambda p: p["name"].lower()) if not p.get("manual")],
     }
 
@@ -392,3 +393,96 @@ def product_links():
                 out[p["id"]] = {"key": i["key"], "name": i["name"], "need": i["need"], "have": i["have"],
                                 "unit": i["unit"], "status": i["status"]}
     return out
+
+
+# --- Rundgang via middagsplanen: én middag annenhver uke bruker det eldste fra beredskapen
+ROTATE_DAYS = 14
+
+
+def rotation_due(start=None):
+    last = db.get_setting("bered_dinner_last")
+    start = start or logic.today()
+    if not last:
+        return True
+    try:
+        return (start - date.fromisoformat(last)).days >= ROTATE_DAYS - 1
+    except ValueError:
+        return True
+
+
+def rotation_candidates(limit=6):
+    """Matvarer i beredskapen som bør brukes først: utløpt/utløper, ikke fornyet på lenge, ellers eldst."""
+    d = compute()
+    items = [i for c in d["categories"] for i in c["items"]
+             if i.get("kcal") and not i["na"] and (i["have"] or 0) > 0]
+    far = "9999-12-31"
+    items.sort(key=lambda i: (not i["expired"], not i["expiring"], not i["stale"], i["expiry"] or far))
+    return items[:limit]
+
+
+def rotation_prompt():
+    """Tekst til middagsplanleggeren, eller "" hvis det ikke er tid for en beredskapsmiddag."""
+    if not rotation_due():
+        return ""
+    cands = rotation_candidates()
+    if not cands:
+        return ""
+    lines = []
+    for i in cands:
+        exp = ""
+        if i["expired"]:
+            exp = ", utløpt"
+        elif i["expiry"]:
+            exp = f", best før {i['expiry']}"
+        lines.append(f"- [{i['key']}] {i['name']} (har {i['have']:g} {i['unit']}{exp})")
+    return "\n".join(lines)
+
+
+def valid_keys(keys):
+    st = _state()
+    ok = set(BY_KEY) | {c["key"] for c in st["custom"]}
+    return [k for k in (keys or []) if isinstance(k, str) and k in ok]
+
+
+def mark_rotation(day):
+    db.set_setting("bered_dinner_last", day)
+
+
+def use_items(used):
+    """Trekk fra det som ble brukt i en middag, og legg erstatning på handlelista.
+    used: [{"key": ..., "amount": ...}]. Returnerer teksten som ble lagt på lista."""
+    import ha
+    d = {i["key"]: i for c in compute()["categories"] for i in c["items"]}
+    todo = db.get_setting("todo_entity")
+    added = []
+    for u in used or []:
+        i = d.get(u.get("key"))
+        if not i:
+            continue
+        try:
+            amt = max(0.0, float(u.get("amount") or 0))
+        except (TypeError, ValueError):
+            continue
+        if not amt:
+            continue
+        set_item(i["key"], {"have": max(0, round((i["have"] or 0) - amt, 1))})
+        amt_txt = (f"{amt:g}").replace(".", ",")
+        txt = f"{i['name']} – {amt_txt} {i['unit']} (beredskap)".replace("  ", " ")
+        if todo:
+            try:
+                ha.todo_add(todo, txt)
+                added.append(txt)
+            except Exception:
+                pass
+    return added
+
+
+def _rotation_info():
+    last = db.get_setting("bered_dinner_last")
+    nxt = None
+    if last:
+        try:
+            nxt = (date.fromisoformat(last) + timedelta(days=ROTATE_DAYS - 1)).isoformat()
+        except ValueError:
+            pass
+    return {"last": last, "next": nxt, "due": rotation_due()}

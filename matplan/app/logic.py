@@ -215,6 +215,26 @@ def process_text(text, uploaded_by=None, source="email", source_ref=None, fallba
 
 # --- Mønstre og lager -------------------------------------------------------
 
+def buy_interval(dates, t):
+    """Hvor mange dager det typisk går mellom hver gang varen kjøpes.
+
+    - Krever minst 3 kjøp siste år; færre kjøp gir ingen rytme (bare «av og til»).
+    - Bruker den største av (a) median avstand mellom de siste kjøpene og (b) snittet
+      over hele perioden fra første kjøp til i dag. (b) gjør at to kjøp tett i tid
+      (f.eks. saft til et selskap) ikke gjør en sjelden vare «ukentlig», og at tiden
+      siden siste kjøp teller med.
+    """
+    window = [d for d in dates if (t - d).days <= 365]
+    if len(window) < 3:
+        return None
+    gaps = [(b - a).days for a, b in zip(window, window[1:]) if (b - a).days > 0]
+    if not gaps:
+        return None
+    med = median(gaps[-8:])
+    avg = max(1, (t - window[0]).days) / len(window)
+    return max(med, avg)
+
+
 def product_stats():
     """Kjøpshistorikk per produkt med anslått lager og når det trolig må kjøpes igjen."""
     rows = db.q(
@@ -257,8 +277,7 @@ def product_stats():
         dates = [d for d, _, _ in evs]
         last = dates[-1]
         since = (t - last).days
-        intervals = [(b - a).days for a, b in zip(dates, dates[1:]) if (b - a).days > 0]
-        interval = median(intervals[-8:]) if intervals else None
+        interval = buy_interval(dates, t)
         recent = sum(1 for d in dates if (t - d).days <= 180)
         q90 = sum(1 for d in dates if (t - d).days < 90)  # antall handler siste kvartal
         shelf = p["shelf_days"] or 30
@@ -315,11 +334,15 @@ def product_stats():
         }
         if interval is None:
             rhythm = None
-        elif interval <= 8:
+        elif since > max(30, interval * 2.5):
+            rhythm = "sjelden"  # ikke kjøpt på lenge – rytmen gjelder ikke lenger
+        elif interval <= 4.5:
+            rhythm = "flere ganger i uka"
+        elif interval <= 10:
             rhythm = "ukentlig"
-        elif interval <= 17:
+        elif interval <= 20:
             rhythm = "annenhver uke"
-        elif interval <= 40:
+        elif interval <= 45:
             rhythm = "månedlig"
         else:
             rhythm = "sjelden"
@@ -777,8 +800,29 @@ def _dinner_ctx(days, wish="", progress=None):
         "liked": ", ".join(d["title"] for d in dishes if d["rating"] > 0),
         "disliked": ", ".join(d["title"] for d in dishes if d["rating"] < 0),
         "per_day": 3 if days <= 3 else 2,
+        "bered": _bered_prompt(),
     }
     return ctx, planned, day_events, cal_errors, dinner_ent
+
+
+def _bered_prompt():
+    try:
+        import beredskap
+        return beredskap.rotation_prompt()
+    except Exception as e:
+        log.warning("Beredskap i middagsplan: %s", e)
+        return ""
+
+
+def _clean_bered(res, allowed):
+    """Behold bare gyldige beredskapsnøkler, og høyst ett beredskapsforslag per dag."""
+    import beredskap
+    names = {i["key"]: i["name"] for i in beredskap.ITEMS}
+    units = {i["key"]: i.get("unit", "") for i in beredskap.ITEMS}
+    for dag in res.get("dager", []):
+        for f in dag.get("forslag", []):
+            keys = beredskap.valid_keys(f.get("beredskap")) if allowed else []
+            f["beredskap"] = [{"key": k, "name": names.get(k, k), "unit": units.get(k, "")} for k in keys]
 
 
 def _attach_recipes(f):
@@ -795,6 +839,7 @@ def dinner_plan(days=3, wish="", progress=None):
     res = ai.dinner_plan(ctx)
     if isinstance(res, list):
         res = {"dager": res}
+    _clean_bered(res, bool(ctx.get("bered")))
     for dag in res.get("dager", []):
         try:
             d = date.fromisoformat(dag.get("dato"))

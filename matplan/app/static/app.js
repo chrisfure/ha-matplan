@@ -235,7 +235,7 @@ function renderPlan(plan) {
     };
     const sug = (d.forslag || []).map((f, i) => `
       <div class="sugg click ${f.valgt || f.planlagt || f.i_kalender ? "chosen" : ""}" data-open="${esc(d.dato)}|${i}">
-        <div class="t"><span class="tt">${typeIcon(f.type)} ${esc(f.tittel)}${f.egen ? ` <em>egen</em>` : ""}</span> <span>${f.min ? f.min + " min" : ""} ›</span></div>
+        <div class="t"><span class="tt">${typeIcon(f.type)} ${esc(f.tittel)}${f.egen ? ` <em>egen</em>` : ""}${(f.beredskap || []).length ? ` <span class="bmark" title="Bruker det eldste fra beredskapslageret">🛟</span>` : ""}</span> <span>${f.min ? f.min + " min" : ""} ›</span></div>
         ${f.beskrivelse ? `<p>${esc(f.beskrivelse)}</p>` : ""}
         ${(f.mangler || []).length ? `<p class="miss">Mangler: ${esc(f.mangler.join(", "))}</p>` : ""}
         <div class="acts">
@@ -351,6 +351,7 @@ function openDish(r) {
     <h3>${typeIcon(f.type)} ${esc(f.tittel)}</h3>
     <div class="meta">
       ${f.type ? `<span class="chip">${esc(f.type)}</span>` : ""}
+      ${(f.beredskap || []).length ? `<span class="chip bchip">🛟 Roterer beredskapen: ${esc(f.beredskap.map((b) => b.name.split(" (")[0]).join(", "))}</span>` : ""}
       ${f.min ? `<span class="chip">⏱ ${esc(f.min)} min</span>` : ""}
       ${f.i_kalender || f.planlagt ? `<span class="chip ok">📅 I kalenderen</span>` : ""}
     </div>
@@ -397,7 +398,7 @@ function openDish(r) {
       const p = await replaceFlow(r);
       if (p) openDish(planRef(`${r.dato}|${r.index}`));
     });
-    $("#d-made", m) && ($("#d-made", m).onclick = () => madeDialog(f.tittel, f.bruker || [], r.dato));
+    $("#d-made", m) && ($("#d-made", m).onclick = () => madeDialog(f.tittel, f.bruker || [], r.dato, f.beredskap || []));
   });
 }
 
@@ -455,9 +456,11 @@ function editDish(r) {
   });
 }
 
-function madeDialog(title, used, day) {
+function madeDialog(title, used, day, bered = []) {
   modal(`
     <h3>Vi lagde: ${esc(title)}</h3>
+    ${bered.length ? `<p class="hint">🛟 <b>Brukt fra beredskapslageret?</b> Det trekkes fra beredskapen, og det samme legges på handlelista – slik roterer lageret.</p>
+    <div class="list">${bered.map((b) => `<label class="row"><input type="checkbox" data-bk="${esc(b.key)}" checked><div class="main">${esc(b.name)}</div><input type="number" class="bamt" data-ba="${esc(b.key)}" value="1" min="0" step="0.5" aria-label="Mengde"><small class="bunit">${esc(b.unit || "")}</small></label>`).join("")}</div>` : ""}
     ${used.length ? `<p class="hint">Hva ble brukt opp? Avkryssede varer markeres som tomme i lageret.</p>
     <div class="list">${used.map((u) => `<label class="row"><input type="checkbox" value="${esc(u)}" checked><div class="main">${esc(u)}</div></label>`).join("")}</div>` : ""}
     <p class="hint">Likte familien den?</p>
@@ -471,11 +474,13 @@ function madeDialog(title, used, day) {
     }));
     $("#m-cancel", m).onclick = closeModal;
     $("#m-save", m).onclick = async () => {
-      const usedSel = $$("input:checked", m).map((i) => i.value);
+      const usedSel = $$("input:checked:not([data-bk])", m).map((i) => i.value);
+      const beredUsed = $$("input[data-bk]:checked", m).map((i) => ({ key: i.dataset.bk, amount: +$(`input[data-ba="${i.dataset.bk}"]`, m).value || 0 }));
       try {
-        await api("meals", { body: { title, day, rating, used: usedSel } });
+        const r = await api("meals", { body: { title, day, rating, used: usedSel, bered_used: beredUsed } });
         closeModal();
-        toast("Lagret");
+        toast(r.bered_added && r.bered_added.length ? `Lagret – ${r.bered_added.length} lagt på handlelista for å fylle opp beredskapen` : "Lagret", 4000);
+        state.bered = null;
         loadMeals();
       } catch (err) { toast(err.message); }
     };
@@ -1714,6 +1719,7 @@ function renderGuide() {
         <li><b>Mat</b> viser omtrent hvor mange døgn maten rekker, regnet i kalorier.</li>
         <li><b>🛒 Legg det som mangler på handlelista</b> – varene merkes «(beredskap)».</li>
         <li>«tips» er ting Matplan foreslår i tillegg til DSBs liste. Dere kan også legge til egne ting nederst.</li>
+        <li><b>🛟 Beredskapsmiddag annenhver uke:</b> middagsplanen foreslår da én middag som bruker det eldste fra beredskapen (det som går ut først). Trykker dere «Vi lagde denne», trekkes det brukte fra beredskapen og legges på handlelista – så roterer lageret av seg selv.</li>
         <li><b>🔄 Rullerende lager:</b> havregryn, pasta, ris, hermetikk, knekkebrød, dopapir, bleier og annet dere bruker i hverdagen, kobles automatisk til varene i lageret (🛟 i Lager). Bruk det eldste først – da fornyes beredskapen hver gang dere handler, og ingenting går ut på dato.</li>
         <li>Har dere kjøpt slike varer siden sist dere telte, kan de legges til med <b>+ fra kvitteringer</b>. Går en vare tom i hverdagen, minner handlelista om at den også er beredskap, og mangler det i beredskapen, foreslås den under «Går trolig tom snart» (ikke forhåndsvalgt).</li>
       </ul>`),
@@ -2106,6 +2112,7 @@ function renderBered() {
       <div class="hint" style="margin:-4px 0 10px">${hh.adults} voksne og ${hh.children} barn · ${d.days} døgn${hh.diaper_kids ? ` · ${hh.diaper_kids} med bleie` : ""} – etter DSBs råd om egenberedskap</div>
       <div class="budget"><i class="${pct >= 100 ? "" : pct >= 60 ? "" : "warn"}" style="width:${Math.min(100, pct)}%"></i></div>
       <div class="budget-t"><span><b>${pct} %</b> på plass</span><span>${d.done} av ${d.total} ting er ferdige</span></div>
+      <p class="hint" style="margin:10px 0 0">🔄 <b>Rundgang:</b> annenhver uke foreslår middagsplanen en middag som bruker det eldste fra beredskapen (merket 🛟). ${d.rotation && d.rotation.last ? `Sist: ${esc(fmtDateY(d.rotation.last))}. ` : ""}${d.rotation && d.rotation.due ? "Kommer med i neste middagsplan." : d.rotation && d.rotation.next ? `Neste gang fra ${esc(fmtDateY(d.rotation.next))}.` : ""}</p>
     </div>
     <div class="metrics m2">
       <div class="metric"><span>💧 Vann</span><b>${numTxt(d.water.have)} av ${d.water.need} l</b><small>${d.water.have ? `nok til ca. ${numTxt(d.water.days)} døgn` : "20 liter per person"}</small></div>

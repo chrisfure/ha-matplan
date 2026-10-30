@@ -106,7 +106,20 @@ Middager familien liker ekstra godt: {ctx['liked'] or 'ingen registrert'}
 Middager familien ikke liker: {ctx['disliked'] or 'ingen registrert'}"""
 
 
-SUGGESTION_SHAPE = '{"tittel":"...","type":"fisk|kjøtt|kylling|vegetar","planlagt":false,"min":20,"bruker":["..."],"mangler":["..."],"beskrivelse":"én–to setninger om retten og tilbehør (grønnsaker)"}'
+SUGGESTION_SHAPE = '{"tittel":"...","type":"fisk|kjøtt|kylling|vegetar","planlagt":false,"min":20,"bruker":["..."],"mangler":["..."],"beskrivelse":"én–to setninger om retten og tilbehør (grønnsaker)","beredskap":[]}'
+
+
+def _bered_rules(ctx):
+    """Rundgang i beredskapslageret: én middag i perioden skal bruke det eldste derfra."""
+    if not ctx.get("bered"):
+        return ""
+    return f"""
+Rundgang i beredskapslageret (gjøres annenhver uke, slik at det eldste blir spist og byttet ut):
+{ctx['bered']}
+- Ett av forslagene i perioden – helst en hverdag – skal være en god, barnevennlig middag som bruker en eller flere av disse (f.eks. pasta med makrell i tomat, chili med bønner og hermetiske tomater, lapskaus en travel dag). Velg en rett som passer reglene over.
+- Sett "beredskap" på det forslaget til en liste med nøklene i hakeparentes, f.eks. ["hermfisk","pasta"]. Alle andre forslag har "beredskap": [].
+- Ta med beredskapsvarene i "bruker" og nevn i "beskrivelse" at retten roterer beredskapslageret.
+"""
 
 
 def dinner_plan(ctx):
@@ -131,7 +144,7 @@ Regler:
 - Salt, pepper, olje, smør, mel, sukker og vanlige krydder kan antas å finnes.
 - {n} forslag per dag, av ulik type.
 - "bruker": varenavn fra listen over det vi har. "mangler": konkrete varer som må kjøpes, med vanlige norske varenavn.
-
+{_bered_rules(ctx)}
 Svar KUN med JSON, ingen forklaring:
 {{"dager":[{{"dato":"YYYY-MM-DD","hjemme":4,"hvem":"alle","tid":"kort|normal|god","begrunnelse":"kort setning, f.eks. «Turn 17–18:30, én voksen på jobbreise»","forslag":[{SUGGESTION_SHAPE}]}}]}}"""
     return ask_json(prompt, task_name="Matplan: middagsforslag")

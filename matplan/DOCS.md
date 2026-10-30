@@ -74,6 +74,7 @@ Trykk **Beredskap** øverst i fanen Lager (på PC i menyen). Lista følger råde
   - Kjøp siden dere telte sist vises som «+ fra kvitteringer», så det er ett trykk å legge dem til.
   - På **Handle** står det «Også beredskap – bruk eldste først» ved slike varer, og ting som mangler i beredskapen foreslås (ikke forhåndsvalgt).
   - Koblingen kan endres ved å trykke på tingen i beredskapslista.
+- **🛟 Beredskapsmiddag annenhver uke:** når middagsplanen lages, og det har gått to uker siden sist, får Claude en liste over matvarene i beredskapen som bør brukes først (utløpt eller utløper snart, ikke fornyet på lenge, eller eldst). Ett av forslagene, helst en hverdag, bruker da noe derfra (for eksempel pasta med makrell eller chili med bønner) og merkes 🛟. Når dere trykker «Vi lagde denne», velger dere hva og hvor mye som ble brukt. Det trekkes fra beredskapen, og det samme legges på handlelista merket «(beredskap)».
 - **Handleliste:** «🛒 Legg det som mangler på handlelista» legger valgte ting på handlelista, merket «(beredskap)».
 
 Les mer på [sikkerhverdag.no](https://www.sikkerhverdag.no/din-beredskap/).
@@ -122,6 +123,7 @@ Finner ikke appen kalenderen, må den være slått på i Google Calendar-integra
 
 ## Slik tenker appen
 
+- **Rytme** («ukentlig», «annenhver uke», «månedlig», «sjelden») vises når en vare er kjøpt minst 3 ganger siste år. Den regnes ut fra den største av to tall: median avstand mellom de siste kjøpene, og snittet fra første kjøp til i dag. Da blir ikke en vare som saft «ukentlig» bare fordi den ble kjøpt to ganger samme uke, og tiden siden siste kjøp teller med. Er varen ikke kjøpt på lenge (mer enn 2,5 ganger vanlig avstand), står det «sjelden».
 - **Lager** er et anslag: en vare regnes som «har» til den trolig er brukt opp, ut fra holdbarhet og hvor ofte dere kjøper den. Trykk *Har* eller *Tomt* når anslaget er feil. Det gjør også middagsforslagene bedre.
   - **Status** (standard): øverst står det som haster – *Bruk snart* (trykk *Brukt* når det er spist) og faste varer som *går tom snart* (*Har mer* / *Tomt*). Under ligger *Har hjemme*, *Tomt – faste varer*, *Av og til* og *Kjøpt én gang*, som kan åpnes og lukkes.
   - **☰-menyen** bytter til *Sted i huset* (kjøleskap, fryser, frukt og brød, skap, annet – med en stripe som viser omtrent hvor mye som er igjen) eller *Liste*, der du velger sortering over lista og snur rekkefølgen med pila. Stedet følger varens kategori.

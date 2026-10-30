@@ -776,6 +776,9 @@ def api_dinner_choose(req, body):
         for x in forslag:
             x["valgt"] = False
         f["valgt"] = True
+        if f.get("beredskap"):  # beredskapsmiddag valgt – neste rundgang om to uker
+            import beredskap
+            beredskap.mark_rotation(dag["dato"])
         if db.get_setting("write_calendar") and not dag.get("planlagt"):
             title = logic.short_title(f.get("tittel", ""))
             rec = f.get("oppskrift") or logic.cached_recipe(f.get("tittel", ""))
@@ -951,7 +954,12 @@ def api_meal_add(req, body):
     if body.get("rating"):
         logic.rate_dish(title, body["rating"])
     used = logic.mark_used(body.get("used") or [])
-    return {"id": mid, "marked_used": used}
+    bered_added = []
+    if body.get("bered_used"):
+        import beredskap
+        bered_added = beredskap.use_items(body["bered_used"])
+        beredskap.mark_rotation(day)
+    return {"id": mid, "marked_used": used, "bered_added": bered_added}
 
 
 @route("POST", r"/api/meals/(\d+)")
