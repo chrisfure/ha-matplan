@@ -85,11 +85,17 @@ Næring (barn i vekst – følg de norske kostrådene):
 - "type": én av fisk, kjøtt, kylling, vegetar."""
 
 
+def _guest_line(ctx):
+    g = ctx.get("guests")
+    return ("\n" + g) if g else "ingen"
+
+
 def _context_block(ctx):
     return f"""Husstand: {ctx['household'] or 'ikke oppgitt – anta en familie med to voksne og barn'}
 Vanlig middagstid: {ctx['dinner_time']}
 Preferanser og allergier: {ctx['preferences'] or 'ingen oppgitt'}
 Ønske denne gangen: {ctx['wish'] or 'ingen'}
+Gjester: {_guest_line(ctx)}
 
 Kalender:
 {ctx['calendar']}
@@ -144,6 +150,7 @@ Regler:
 - Salt, pepper, olje, smør, mel, sukker og vanlige krydder kan antas å finnes.
 - {n} forslag per dag, av ulik type.
 - "bruker": varenavn fra listen over det vi har. "mangler": konkrete varer som må kjøpes, med vanlige norske varenavn.
+- Dager med gjester: tell gjestene med i "hjemme" og "hvem" (f.eks. «alle + 2 gjester»), velg retter som passer mange og er lette å lage i større porsjoner (gjerne litt finere i helga, barnevennlig hvis det kommer barn), og ta høyde for større mengder i "mangler" (f.eks. «Kyllingfilet 1,2 kg»).
 {_bered_rules(ctx)}
 Svar KUN med JSON, ingen forklaring:
 {{"dager":[{{"dato":"YYYY-MM-DD","hjemme":4,"hvem":"alle","tid":"kort|normal|god","begrunnelse":"kort setning, f.eks. «Turn 17–18:30, én voksen på jobbreise»","forslag":[{SUGGESTION_SHAPE}]}}]}}"""

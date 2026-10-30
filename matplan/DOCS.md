@@ -109,6 +109,10 @@ Matplan bruker kalenderen som heter **Middag** i Home Assistant. Den kan også v
 - **Velg = skriv inn:** Trykker du «📅 Velg» på et forslag, legges det inn i Middag-kalenderen som heldagsavtale med kort navn, for eksempel «Taco». Vil du bytte etterpå, endrer eller sletter du avtalen i kalenderen selv. Skrivingen kan slås av under Mer → Innstillinger.
 - **Tommel opp/ned** gjelder retten, ikke én bestemt dag, og påvirker forslagene framover.
 
+## Gjester
+
+Trykk **👥 Gjester** over «Lag middagsforslag», velg antall voksne og barn og hvilke dager de kommer. Claude teller gjestene med, velger retter som passer flere (barnevennlig hvis det kommer barn, gjerne litt finere i helga) og regner med større mengder i det som må kjøpes. Dagen får merket «👥 +3 gjester», og oppskriften lages for riktig antall.
+
 ## Menyen og oppskrifter
 
 - **Hverdag og helg:** Mandag–torsdag foreslås enkel, rask hverdagsmat. Fredag og lørdag foreslås kosemat, og søndag en litt finere søndagsmiddag. Dager med dårlig tid går foran.
@@ -123,6 +127,9 @@ Finner ikke appen kalenderen, må den være slått på i Google Calendar-integra
 
 ## Slik tenker appen
 
+- **Lærer av dere:** hver gang dere trykker *Har* eller *Tomt*, eller krysser av hva som ble brukt i en middag, husker appen om varen gikk tom tidligere eller senere enn den trodde. Etter noen rettelser justeres anslaget for akkurat den varen (vises på varekortet som «🧠 Lært av rettelser»). Jo flere kvitteringer og rettelser, jo sjeldnere må dere rette.
+- **Mengde teller:** kjøpte dere mer enn vanlig sist (f.eks. tre pakker i stedet for én), regnes varen å vare tilsvarende lenger.
+- **«Har» varer ikke evig:** trykker dere *Har*, regner appen med at det dere hadde, varer omtrent en halv periode til. Deretter går anslaget tilbake til vanlig, så varen ikke blir stående som «har» for alltid.
 - **Rytme** («ukentlig», «annenhver uke», «månedlig», «sjelden») vises når en vare er kjøpt minst 3 ganger siste år. Den regnes ut fra den største av to tall: median avstand mellom de siste kjøpene, og snittet fra første kjøp til i dag. Da blir ikke en vare som saft «ukentlig» bare fordi den ble kjøpt to ganger samme uke, og tiden siden siste kjøp teller med. Er varen ikke kjøpt på lenge (mer enn 2,5 ganger vanlig avstand), står det «sjelden».
 - **Lager** er et anslag: en vare regnes som «har» til den trolig er brukt opp, ut fra holdbarhet og hvor ofte dere kjøper den. Trykk *Har* eller *Tomt* når anslaget er feil. Det gjør også middagsforslagene bedre.
   - **Status** (standard): øverst står det som haster – *Bruk snart* (trykk *Brukt* når det er spist) og faste varer som *går tom snart* (*Har mer* / *Tomt*). Under ligger *Har hjemme*, *Tomt – faste varer*, *Av og til* og *Kjøpt én gang*, som kan åpnes og lukkes.

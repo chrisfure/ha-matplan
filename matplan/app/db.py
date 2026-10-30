@@ -126,6 +126,10 @@ def _migrate(c):
         "INSERT OR IGNORE INTO dish_ratings(title_key, title, rating) "
         "SELECT lower(trim(title)), title, rating FROM meals WHERE rating != 0"
     )
+    # rettelser av lageranslaget («Har»/«Tomt»), som appen lærer av
+    c.execute("CREATE TABLE IF NOT EXISTS pantry_log(id INTEGER PRIMARY KEY, product_id INTEGER, status TEXT, "
+              "at TEXT, since INTEGER, base_life REAL)")
+    c.execute("CREATE INDEX IF NOT EXISTS pantry_log_pid ON pantry_log(product_id)")
     c.execute("CREATE INDEX IF NOT EXISTS meals_day ON meals(day)")
     c.execute("CREATE INDEX IF NOT EXISTS meals_key ON meals(title_key)")
 

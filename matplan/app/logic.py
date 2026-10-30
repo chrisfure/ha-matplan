@@ -235,6 +235,29 @@ def buy_interval(dates, t):
     return max(med, avg)
 
 
+def _learn_factor(logs):
+    """Hvor mye lenger/kortere en vare varer enn rytmen tilsier, lært av «Har»/«Tomt».
+
+    «Tomt» etter 5 dager når appen trodde 10 → 0,5. «Har» når appen trodde varen var
+    brukt opp → varer lenger. Medianen av de siste rettelsene, dempet når det er få."""
+    ratios = []
+    for lg in logs[-8:]:
+        base, since = lg["base_life"] or 0, lg["since"]
+        if base <= 0 or since is None:
+            continue
+        if lg["status"] == "tomt" and since >= 0:
+            ratios.append(max(since, 0.5) / base)
+        elif lg["status"] == "har" and since >= base * 0.8:
+            ratios.append((since + base * 0.3) / base)
+    if not ratios:
+        return 1.0, 0
+    ratios.sort()
+    med = ratios[len(ratios) // 2]
+    med = min(2.5, max(0.4, med))
+    weight = min(1.0, len(ratios) / 3)
+    return 1 + (med - 1) * weight, len(ratios)
+
+
 def product_stats():
     """Kjøpshistorikk per produkt med anslått lager og når det trolig må kjøpes igjen."""
     rows = db.q(
@@ -246,6 +269,9 @@ def product_stats():
     )
     products = {p["id"]: p for p in db.q("SELECT * FROM products")}
     pantry = {p["product_id"]: p for p in db.q("SELECT * FROM pantry")}
+    logs = defaultdict(list)
+    for lg in db.q("SELECT * FROM pantry_log ORDER BY at"):
+        logs[lg["product_id"]].append(lg)
     # enkeltlinjer med pris per enhet (stk eller kg), butikk og dato
     lines = defaultdict(list)
     for ln in db.q(
@@ -285,13 +311,28 @@ def product_stats():
         override = None
         if pan and pan["at"] and pan["at"][:10] >= last.isoformat():
             override = pan["status"]
-        gone_after = min(shelf, interval * 1.3) if interval else shelf
-        if override:
-            in_stock = override == "har"
+        base_life = min(shelf, interval * 1.3) if interval else shelf
+        # lært av rettelsene deres: går varen tom tidligere/senere enn appen trodde?
+        factor, n_learn = _learn_factor(logs.get(pid, []))
+        # kjøpte dere mer enn vanlig sist, varer det lenger
+        qtys = sorted(q for _, q, _ in evs if q)
+        med_q = qtys[len(qtys) // 2] if qtys else 1
+        qty_factor = min(3.0, max(1.0, (evs[-1][1] or 1) / med_q)) if med_q else 1.0
+        gone_after = min(shelf, base_life * factor * qty_factor)
+        if override == "har":
+            # «Har» gjelder ikke for alltid: regn med at det dere hadde, varer omtrent en halv periode til
+            since_o = (t - date.fromisoformat(pan["at"][:10])).days
+            remaining = max(3, min(shelf, gone_after) * 0.5)
+            if since_o < remaining:
+                in_stock, days_left = True, max(0, round(remaining - since_o))
+            else:
+                override, in_stock, days_left = None, False, 0
+        elif override == "tomt":
+            in_stock, days_left = False, 0
         else:
             in_stock = since < gone_after
+            days_left = max(0, round(gone_after - since))
         use_soon = in_stock and override != "har" and shelf <= 14 and since >= shelf * 0.6
-        days_left = 0 if override == "tomt" else max(0, round(gone_after - since))
         spent_180 = sum(sp for d, _, sp in evs if (t - d).days <= 180)
         pl_all = lines.get(pid, [])
         # Velg sammenligningsgrunnlag: kr/kg, kr/l, kr/stk eller per pakning
@@ -370,6 +411,10 @@ def product_stats():
             "override": override,
             "in_stock": in_stock,
             "use_soon": use_soon,
+            "base_life": round(base_life, 1),
+            "learned": round(factor, 2) if n_learn else None,
+            "learn_n": n_learn,
+            "qty_boost": round(qty_factor, 1) if qty_factor > 1 else None,
         })
     # varer lagt inn manuelt som «har fra før» (uten kjøp)
     for pid, pan in pantry.items():
@@ -382,7 +427,7 @@ def product_stats():
             "id": pid, "name": p["name"], "category": p["category"] or "Annet", "food": bool(p["food"]),
             "ignore": bool(p["ignore"]), "shelf_days": shelf, "times": 0, "recent": 0, "q90": 0,
             "last": pan["at"][:10], "since": since, "interval": None, "avg_qty": 1, "override": "har",
-            "in_stock": True, "use_soon": shelf <= 14 and since >= shelf * 0.6,
+            "in_stock": since < shelf, "use_soon": shelf <= 14 and shelf * 0.6 <= since < shelf,
             "days_left": max(0, round(shelf - since)), "rhythm": None, "regular": False,
             "spent_180": 0, "spent_90": 0, "avg_price": None, "prices": None, "manual": True,
         })
@@ -484,6 +529,14 @@ def shopping_suggestions():
 
 def set_pantry(product_id, status):
     if status in ("har", "tomt"):
+        # husk rettelsen, så anslaget blir bedre neste gang
+        try:
+            cur = next((p for p in product_stats() if p["id"] == product_id), None)
+            if cur and not cur.get("manual"):
+                db.ex("INSERT INTO pantry_log(product_id, status, at, since, base_life) VALUES(?,?,?,?,?)",
+                      (product_id, status, now().isoformat(timespec="seconds"), cur["since"], cur["base_life"]))
+        except Exception as e:
+            log.warning("Kunne ikke logge rettelse: %s", e)
         db.ex(
             "INSERT INTO pantry(product_id, status, at) VALUES(?,?,?) "
             "ON CONFLICT(product_id) DO UPDATE SET status=excluded.status, at=excluded.at",
@@ -831,15 +884,47 @@ def _attach_recipes(f):
         f["oppskrift"] = rec
 
 
-def dinner_plan(days=3, wish="", progress=None):
+def _guests_clean(guests):
+    """[{date, adults, children}] → {dato: (voksne, barn)}"""
+    out = {}
+    for g in guests or []:
+        try:
+            d = date.fromisoformat(g.get("date"))
+            a, c = max(0, min(30, int(g.get("adults") or 0))), max(0, min(30, int(g.get("children") or 0)))
+        except (TypeError, ValueError):
+            continue
+        if a + c:
+            out[d.isoformat()] = (a, c)
+    return out
+
+
+def _guests_text(gmap):
+    if not gmap:
+        return ""
+    parts = []
+    for d, (a, c) in sorted(gmap.items()):
+        wd = WEEKDAYS[date.fromisoformat(d).weekday()]
+        who = " og ".join(x for x in [f"{a} voksne" if a else "", f"{c} barn" if c else ""] if x)
+        parts.append(f"- {wd} {d}: {who} på besøk i tillegg til husstanden")
+    return "\n".join(parts)
+
+
+def dinner_plan(days=3, wish="", progress=None, guests=None):
     days = max(1, min(int(days or 3), 7))
+    gmap = _guests_clean(guests)
     ctx, planned, day_events, cal_errors, dinner_ent = _dinner_ctx(days, wish, progress)
+    ctx["guests"] = _guests_text(gmap)
     if progress:
         progress("Spør Claude om forslag")
     res = ai.dinner_plan(ctx)
     if isinstance(res, list):
         res = {"dager": res}
     _clean_bered(res, bool(ctx.get("bered")))
+    res["gjester"] = gmap
+    for dag in res.get("dager", []):
+        g = gmap.get(dag.get("dato"))
+        if g:
+            dag["gjester"] = g[0] + g[1]
     for dag in res.get("dager", []):
         try:
             d = date.fromisoformat(dag.get("dato"))
@@ -870,6 +955,7 @@ def replace_suggestion(dato, index, progress=None):
         raise RuntimeError("Står allerede i middagskalenderen – endre den i kalenderen")
     days = (date.fromisoformat(dato) - today()).days + 1
     ctx, *_ = _dinner_ctx(max(days, 1), plan.get("onske", ""), progress)
+    ctx["guests"] = _guests_text({k: tuple(v) for k, v in (plan.get("gjester") or {}).items()})
     avoid = [f.get("tittel", "") for f in dag["forslag"]] + dag.get("byttet", [])
     info = ", ".join(x for x in [
         f"{dag.get('hjemme')} hjemme" if dag.get("hjemme") else "",

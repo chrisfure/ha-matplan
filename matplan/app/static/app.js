@@ -177,14 +177,43 @@ $$("#days-seg button").forEach((b) =>
   b.addEventListener("click", () => {
     $$("#days-seg button").forEach((x) => x.classList.toggle("on", x === b));
     state.days = +b.dataset.days;
+    renderGuests();
   })
 );
+
+// Gjester: antall voksne/barn ekstra, og hvilke dager
+state.guests = { adults: 0, children: 0, days: new Set() };
+function renderGuests() {
+  const g = state.guests, el = $("#guests");
+  const days = [...Array(state.days).keys()].map((i) => { const d = new Date(); d.setDate(d.getDate() + i); return d; });
+  const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  [...g.days].forEach((x) => { if (!days.some((d) => iso(d) === x)) g.days.delete(x); });
+  const n = g.adults + g.children;
+  if (n && !g.days.size && days.length === 1) g.days.add(iso(days[0]));
+  el.innerHTML = `<details class="dropdown guests" ${n ? "open" : ""}><summary>👥 Gjester${n ? `: ${n} ${g.days.size ? `(${g.days.size} dag${g.days.size === 1 ? "" : "er"})` : "– velg dag"}` : ""}</summary>
+    <div class="dd-body" style="padding:10px 12px">
+      <div class="gcount"><span>Voksne</span><div class="stepper"><button data-g="adults" data-d="-1">−</button><span>${g.adults}</span><button data-g="adults" data-d="1">+</button></div></div>
+      <div class="gcount"><span>Barn</span><div class="stepper"><button data-g="children" data-d="-1">−</button><span>${g.children}</span><button data-g="children" data-d="1">+</button></div></div>
+      <div class="chips flush">${days.map((d) => `<button data-gday="${iso(d)}" class="${g.days.has(iso(d)) ? "sel" : ""}">${d.toLocaleDateString("nb-NO", { weekday: "short", day: "numeric" })}</button>`).join("")}</div>
+      <p class="hint" style="margin-bottom:0">Gjestene telles med i porsjonene og det som må kjøpes, og Claude velger retter som passer flere.</p>
+    </div></details>`;
+}
+$("#guests").addEventListener("click", (e) => {
+  const st = e.target.closest("[data-g]");
+  if (st) { const k = st.dataset.g; state.guests[k] = Math.max(0, Math.min(30, state.guests[k] + +st.dataset.d)); return renderGuests(); }
+  const d = e.target.closest("[data-gday]");
+  if (d) { const s2 = state.guests.days; s2.has(d.dataset.gday) ? s2.delete(d.dataset.gday) : s2.add(d.dataset.gday); renderGuests(); }
+});
+renderGuests();
 
 $("#btn-plan").addEventListener("click", async () => {
   const btn = $("#btn-plan");
   btn.disabled = true;
+  const g = state.guests;
+  const guests = g.adults + g.children ? [...g.days].map((date) => ({ date, adults: g.adults, children: g.children })) : [];
+  if (g.adults + g.children && !guests.length) { btn.disabled = false; return toast("Velg hvilke dager dere har gjester"); }
   try {
-    const plan = await runJob(api("dinner", { body: { days: state.days, wish: $("#wish").value } }), $("#plan-job"));
+    const plan = await runJob(api("dinner", { body: { days: state.days, wish: $("#wish").value, guests } }), $("#plan-job"));
     renderPlan(plan);
   } catch (_) {} finally { btn.disabled = false; }
 });
@@ -250,6 +279,7 @@ function renderPlan(plan) {
       <div class="meta">
         ${d.hjemme ? `<span class="chip">👥 ${esc(d.hjemme)} hjemme${d.hvem && d.hvem !== "alle" ? " (" + esc(d.hvem) + ")" : ""}</span>` : ""}
         ${d.planlagt ? `<span class="chip ok">📅 ${esc(d.planlagt)}</span>` : ""}
+        ${d.gjester ? `<span class="chip">👥 +${d.gjester} gjest${d.gjester === 1 ? "" : "er"}</span>` : ""}
         ${tidTxt ? `<span class="chip ${tidCls}">⏱ ${esc(tidTxt)}</span>` : ""}
       </div>
       ${d.begrunnelse ? `<div class="why">${esc(d.begrunnelse)}</div>` : ""}
@@ -1579,6 +1609,8 @@ function editProduct(p) {
       <div class="halt">💡 <b>Bedre alternativ:</b> ${esc(p.health.alt)}</div>
       <div class="hacts"><button class="small ghost" data-upf="0">Ikke ultraprosessert</button>${p.health.manual ? `<button class="small ghost" data-upf="auto">Automatisk</button>` : ""}</div>
     </div>` : `<div class="hacts" style="margin:-4px 0 10px">${p.health && p.health.cleared ? `<small class="hint">Merket som ikke ultraprosessert.</small> <button class="small ghost" data-upf="auto">Automatisk</button>` : `<button class="small ghost" data-upf="1">Merk som ultraprosessert</button>`}</div>`}
+    ${p.learned && Math.abs(p.learned - 1) >= 0.1 ? `<p class="hint learned">🧠 Lært av ${p.learn_n} rettelse${p.learn_n === 1 ? "" : "r"}: varer ca. ${Math.round(Math.abs(p.learned - 1) * 100)} % ${p.learned < 1 ? "kortere" : "lenger"} enn kjøpsrytmen tilsier.</p>` : ""}
+    ${p.qty_boost ? `<p class="hint learned">🛒 Dere kjøpte mer enn vanlig sist – regnes å vare ca. ${String(p.qty_boost).replace(".", ",")} ganger så lenge.</p>` : ""}
     <div class="stats">
       <div><b>${p.q90}×</b><span>per kvartal</span></div>
       <div><b>${p.interval ? "hver " + Math.round(p.interval) + ". dag" : "–"}</b><span>rytme</span></div>
@@ -1733,7 +1765,8 @@ function renderGuide() {
     sec("💡 Tips", `
       <ul>
         <li>Jo flere kvitteringer, jo bedre forslag.</li>
-        <li>Trykk <b>Tomt</b> når noe går tom – da blir både lager og handleliste riktigere.</li>
+        <li>Trykk <b>Tomt</b> eller <b>Har</b> når anslaget er feil – appen lærer av det og trenger færre rettelser etter hvert.</li>
+        <li><b>👥 Gjester</b> på Middag: velg antall voksne og barn og hvilke dager, så blir forslag og handleliste tilpasset.</li>
         <li>Oppskrifter huskes. Redigerer du en, brukes din versjon neste gang.</li>
         <li><b>Butikkvarsel</b> (Mer → Innstillinger): varsel på telefonen når du er i en av butikkene dine og det står noe på handlelista. Trykk på varselet for å åpne lista.</li>
         <li>Appen ligger i sidemenyen i Home Assistant, også i mobilappen. På PC får du bredere oversikt med tabell og flere kolonner.</li>

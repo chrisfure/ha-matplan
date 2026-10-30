@@ -511,3 +511,7 @@ em.up { font-style: normal; color: #c0392b; } em.down { font-style: normal; colo
 input.bamt { width: 64px; margin: 0; padding: 6px 8px; flex: none; }
 @media (prefers-color-scheme: dark) { .bchip { background: #1b3240 !important; color: #cfe6f5 !important; } }
 .bunit { color: var(--muted); font-size: 13px; min-width: 32px; }
+/* gjester og læring */
+details.guests { margin-top: 10px; }
+.gcount { display: flex; justify-content: space-between; align-items: center; padding: 4px 0; }
+.learned { margin: -2px 0 8px; }

@@ -749,7 +749,8 @@ def api_dinner(req, body):
 def api_dinner_new(req, body):
     days = (body or {}).get("days", 3)
     wish = (body or {}).get("wish", "")
-    return start_job("dinner", lambda p: logic.dinner_plan(days, wish, p))
+    guests = (body or {}).get("guests") or []
+    return start_job("dinner", lambda p: logic.dinner_plan(days, wish, p, guests))
 
 
 @route("POST", "/api/dinner/choose")
