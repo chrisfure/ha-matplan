@@ -4,6 +4,7 @@ import sys
 import threading
 import time
 
+import actions
 import db
 import logic
 import mailer
@@ -28,5 +29,6 @@ def clock_loop():
 if __name__ == "__main__":
     db.conn()
     mailer.start_scheduler()
+    actions.start()
     threading.Thread(target=clock_loop, daemon=True, name="clock").start()
     server.run()

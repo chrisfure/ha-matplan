@@ -14,7 +14,7 @@ configuration:
     description: INBOX, eller en Gmail-etikett
   imap_sender:
     name: Avsender
-    description: Bare e-post fra denne adressen eller dette domenet leses (f.eks. barnehagen.no). Påkrevd.
+    description: Bare e-post fra denne adressen eller dette domenet leses (f.eks. barnehagen.no). Valgfri – kilder kan også legges inn i appen.
   imap_interval_minutes:
     name: Sjekk hvert (minutter)
   imap_since_days:

@@ -19,6 +19,10 @@
 <main>
   <section id="tab-review" class="tab active">
     <div class="intro card" id="intro"></div>
+    <div class="row quick">
+      <label class="upload primary-outline">📷 Ta bilde av lapp<input type="file" id="photo" accept="image/*" capture="environment" hidden></label>
+      <label class="upload">📄 Last opp skriv<input type="file" id="file" accept="application/pdf,image/jpeg,image/png" hidden></label>
+    </div>
     <div id="pending"></div>
     <details class="card add">
       <summary>➕ Legg til noe selv</summary>
@@ -30,7 +34,7 @@
       <div class="kids" id="add-kids"></div>
       <button class="primary" id="btn-add">Legg til som forslag</button>
     </details>
-    <h2 class="sec">I kalenderen</h2>
+    <h2 class="sec">Godkjent</h2>
     <div id="approved"></div>
     <details class="sec-details" id="rejected-wrap" hidden>
       <summary>Avvist</summary>
@@ -46,7 +50,7 @@
     </div>
     <div class="card">
       <h2>Kortet til dashbordet</h2>
-      <p class="muted">Legg dette kortet <b>øverst</b> på dashbordet. Det vises bare fra kveldstid til morgenen etter, og bare når det er noe å huske.</p>
+      <p class="muted">Legg dette kortet <b>øverst</b> på dashbordet. Det vises bare fra kveldstid til morgenen etter, og bare når det er noe å vise.</p>
       <pre id="card-yaml"></pre>
       <button id="btn-copy">Kopier</button>
     </div>
@@ -55,14 +59,39 @@
   <section id="tab-settings" class="tab">
     <div class="card">
       <h2>Barna</h2>
-      <p class="muted">«Skrives som» er slik barnehagen skriver navnet i ukeplanen (skiller «Ola AB» fra andre som heter Ola).</p>
-      <label>Barnehage<input type="text" id="s-kg" placeholder="Navn på barnehagen"></label>
+      <p class="muted">«Skrives som» er slik barnehagen eller skolen skriver navnet (skiller «Ola AB» fra andre som heter Ola).</p>
+      <label>Barnehage (navn)<input type="text" id="s-kg" placeholder="Navn på barnehagen"></label>
       <div id="kids-edit"></div>
       <button id="btn-add-kid">+ Legg til barn</button>
     </div>
+
+    <div class="card">
+      <h2>Kilder</h2>
+      <p class="muted">Hvem som sender beskjeder, og hvilke barn de gjelder – barnehage, skole, SFO, idrettslag. Bare e-post fra disse leses. Mange skoleapper (Vigilo, Transponder o.l.) sender bare «du har fått en melding» på e-post; da står ikke selve beskjeden i e-posten, og den må tas bilde av eller legges inn selv.</p>
+      <div id="sources-edit"></div>
+      <button id="btn-add-source">+ Legg til kilde</button>
+    </div>
+
+    <div class="card">
+      <h2>Faste påminnelser</h2>
+      <p class="muted">Ting som gjentar seg hver uke, som gymtøy på tirsdager. Vises på skjermen og i kveldsvarselet, men legges ikke i kalenderen.</p>
+      <div id="fixed-list"></div>
+      <details class="add-fixed">
+        <summary>+ Ny fast påminnelse</summary>
+        <label>Hva<input type="text" id="fx-title" placeholder="F.eks. Gymtøy"></label>
+        <label>Ha med (skill med komma)<input type="text" id="fx-bring" placeholder="gymtøy, joggesko"></label>
+        <div class="kids" id="fx-days"></div>
+        <div class="kids" id="fx-kids"></div>
+        <button class="primary" id="btn-fx-add">Legg til</button>
+      </details>
+    </div>
+
     <div class="card">
       <h2>Varsler</h2>
-      <label>Telefon som varsles (bare denne)<select id="s-notify"></select></label>
+      <label>Telefon som varsles<select id="s-notify"></select></label>
+      <label class="check"><input type="checkbox" id="s-extra-on"> Send også varsler til</label>
+      <select id="s-extra" class="indent"></select>
+      <p class="muted indent">Den andre får kveldsvarsel, frister og ukesoppsummering. Godkjenning går bare til deg.</p>
       <button id="btn-test">Send testvarsel</button>
       <div class="grid2">
         <label>Gjennomgang, dag<select id="s-review-day">
@@ -73,22 +102,45 @@
         <label>Kveldsinfo fra<input type="time" id="s-evening"></label>
         <label>Tas bort kl.<input type="time" id="s-hide"></label>
       </div>
-      <label class="check"><input type="checkbox" id="s-evening-notify"> Varsle meg kl. <span id="s-evening-echo"></span> om hva som skjer i morgen</label>
+      <label class="check"><input type="checkbox" id="s-evening-notify"> Kveldsvarsel kl. <span id="s-evening-echo"></span> om hva som skjer i morgen</label>
       <label class="check"><input type="checkbox" id="s-urgent"> Varsle med en gang når noe nytt gjelder før neste gjennomgang</label>
+      <label class="check"><input type="checkbox" id="s-weekly"> Oppsummering av uka i gjennomgangsvarselet og på skjermen</label>
+      <label class="check"><input type="checkbox" id="s-deadline"> Varsle om frister <input type="number" id="s-deadline-days" min="2" max="14" class="num"> dager før</label>
     </div>
+
+    <div class="card">
+      <h2>Vær og klær</h2>
+      <label>Værvarsel<select id="s-weather"></select></label>
+      <label class="check"><input type="checkbox" id="s-weather-daily"> Vis vær og klesråd hver hverdag, også når det ikke er andre beskjeder</label>
+      <p class="muted" id="weather-preview"></p>
+    </div>
+
+    <div class="card">
+      <h2>Handleliste</h2>
+      <label>Liste (den samme som Matplan bruker)<select id="s-todo"></select></label>
+      <label class="check">Legg matpakkemat på lista <input type="number" id="s-lunch-days" min="1" max="7" class="num"> dager før turdager og matpakkedager</label>
+    </div>
+
+    <div class="card">
+      <h2>Læring</h2>
+      <label class="check"><input type="checkbox" id="s-learn-reject"> Avvis automatisk forslag som ligner noe du har avvist to ganger</label>
+      <label class="check"><input type="checkbox" id="s-learn-approve"> Godkjenn automatisk forslag som ligner noe du har godkjent tre ganger (og aldri avvist)</label>
+      <p class="muted">Det som avvises eller godkjennes automatisk, står merket i lista og kan angres.</p>
+    </div>
+
     <div class="card">
       <h2>Lesing</h2>
       <label>AI-modell<select id="s-ai"></select></label>
       <label>Hopp over e-poster med emne som passer (én per linje)<textarea id="s-ignore" rows="4"></textarea></label>
-      <button class="primary" id="btn-save">Lagre innstillinger</button>
     </div>
+
+    <div class="savebar"><button class="primary wide" id="btn-save">Lagre innstillinger</button></div>
+
     <div class="card">
       <h2>E-post</h2>
       <p class="muted" id="mail-status"></p>
-      <div class="row">
-        <button id="btn-poll">Hent e-post nå</button>
-        <label class="upload">Last opp ukeplan (PDF)<input type="file" id="file" accept="application/pdf" hidden></label>
-      </div>
+      <p class="muted" id="actions-status"></p>
+      <button id="btn-poll">Hent e-post nå</button>
       <ul class="mails" id="mails"></ul>
     </div>
   </section>

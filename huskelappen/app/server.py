@@ -12,11 +12,14 @@ from datetime import date, timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import unquote, urlparse
 
+import actions
 import db
+import extract
 import ha
 import logic
 import mailer
 import util
+import weather
 from config import DEV, INGRESS_IP, PORT
 
 log = logging.getLogger("huskelappen.http")
@@ -97,19 +100,21 @@ def guess_calendars():
 def api_state(req, body):
     guess_calendars()
     today = util.today()
-    d, label = logic.screen_window()
-    preview_day = d or today + timedelta(days=1)
-    lines = logic.day_lines(preview_day)
+    showing_day, _ = logic.screen_window()
+    d, label, text, parts = logic.screen_content(preview=True)
     return {
         "user": req.user,
         "today": today.isoformat(),
         "settings": db.all_settings(),
         "mail": {"enabled": mailer.enabled(), **mailer.status},
+        "sources": mailer.sources(),
+        "actions": actions.status,
+        "fixed": logic.fixed_list(),
         "items": logic.items(from_day=today.isoformat()),
         "pending": logic.pending_count(),
         "next_review": logic.next_review().isoformat(timespec="minutes"),
-        "screen": {"showing": bool(d and lines), "label": label or "I morgen", "day": preview_day.isoformat(),
-                   "day_text": util.nice_date(preview_day), "lines": lines},
+        "screen": {"showing": bool(showing_day and text), "label": label, "day": d.isoformat(),
+                   "day_text": util.nice_date(d), "lines": parts},
         "mails": db.q("SELECT subject, received, result FROM mails ORDER BY received DESC, at DESC LIMIT 15"),
         "dashboard_card": DASHBOARD_CARD,
     }
@@ -132,7 +137,8 @@ def api_entities(req, body):
                 notifies += ["notify." + svc for svc in (dom.get("services") or {}) if svc.startswith("mobile_app_")]
     except Exception:
         pass
-    return {"calendar": pick("calendar."), "ai_task": pick("ai_task."), "notify": sorted(notifies)}
+    return {"calendar": pick("calendar."), "ai_task": pick("ai_task."), "notify": sorted(notifies),
+            "weather": pick("weather."), "todo": pick("todo.")}
 
 
 @route("POST", "/api/settings")
@@ -155,9 +161,36 @@ def api_item_update(req, body, iid):
 @route("POST", r"/api/items/(\d+)/approve")
 def api_approve(req, body, iid):
     try:
-        return logic.approve(int(iid))
+        return logic.approve(int(iid), by="user")
     except (KeyError, RuntimeError) as e:
         raise ApiError(str(e))
+
+
+@route("POST", "/api/fixed")
+def api_fixed_add(req, body):
+    try:
+        return {"id": logic.add_fixed(body or {})}
+    except (ValueError, TypeError) as e:
+        raise ApiError(str(e))
+
+
+@route("POST", r"/api/fixed/(\d+)/delete")
+def api_fixed_delete(req, body, fid):
+    logic.delete_fixed(int(fid))
+    return {"ok": True}
+
+
+@route("POST", r"/api/fixed/(\d+)/active")
+def api_fixed_active(req, body, fid):
+    logic.set_fixed_active(int(fid), bool((body or {}).get("on")))
+    return {"ok": True}
+
+
+@route("GET", "/api/weather_preview")
+def api_weather_preview(req, body):
+    d = util.today() + timedelta(days=1)
+    w = weather.day_advice(d)
+    return {"day": util.nice_date(d), "summary": w[0] if w else None, "clothes": w[1] if w else None}
 
 
 @route("POST", r"/api/items/(\d+)/reject")
@@ -174,13 +207,7 @@ def api_restore(req, body, iid):
 
 @route("POST", "/api/approve_all")
 def api_approve_all(req, body):
-    ok, errors = 0, []
-    for it in logic.items("pending", util.today().isoformat()):
-        try:
-            logic.approve(it["id"])
-            ok += 1
-        except Exception as e:
-            errors.append(f"{it['title']}: {e}")
+    ok, errors = logic.approve_all()
     return {"approved": ok, "errors": errors}
 
 
@@ -200,7 +227,7 @@ def api_poll(req, body):
 
 @route("POST", "/api/upload")
 def api_upload(req, body):
-    """Last opp en ukeplan for hånd (PDF) – nyttig for å teste uten e-post."""
+    """Last opp en ukeplan (PDF) eller et bilde av en lapp."""
     b = body or {}
     try:
         data = base64.b64decode(b.get("data") or "")
@@ -210,11 +237,17 @@ def api_upload(req, body):
         raise ApiError("Tom fil")
     if not mailer.has_children():
         raise ApiError("Legg inn barna under Innstillinger først")
-    name = b.get("filename") or "ukeplan.pdf"
+    name = b.get("filename") or "opplasting"
+    if not (extract.is_pdf(name, data) or extract.image_type(name, data)):
+        raise ApiError("Bare PDF, JPG eller PNG støttes (på iPhone: velg «Mest kompatibel» under Kamera → Formater)")
     msgid = "upload:" + uuid.uuid4().hex[:8]
+    kids = [c["name"] for c in db.get_setting("children") or [] if c.get("name")]
+    photo = bool(extract.image_type(name, data))
+    source = {"name": "en lapp (bilde)" if photo else "et opplastet skriv", "children": kids}
 
     def run():
-        res, new = mailer.process(name, "Lastet opp", util.today(), "", [(name, data)], msgid)
+        res, new = mailer.process("Bilde av lapp" if photo else name, "Lastet opp", util.today(), "",
+                                  [(name, data)], msgid, source)
         return res
     return start_job("upload", run)
 
@@ -229,9 +262,10 @@ def api_job(req, body, jid):
 
 @route("POST", "/api/test_notify")
 def api_test_notify(req, body):
-    if not logic.notify("Huskelappen", "Testvarsel – slik ser varslene ut."):
+    n = logic.notify("Huskelappen", "Testvarsel – slik ser varslene ut.", audience="all")
+    if not n:
         raise ApiError("Velg hvilken telefon som skal varsles først")
-    return {"ok": True}
+    return {"sent": n}
 
 
 class Handler(BaseHTTPRequestHandler):

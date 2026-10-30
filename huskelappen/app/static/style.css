@@ -91,3 +91,16 @@ details.add summary, details.sec-details summary { cursor: pointer; font-weight:
 details.sec-details { margin-top: 18px; color: var(--muted); }
 .toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); background: var(--ink);
   color: var(--bg); padding: 10px 16px; border-radius: 10px; max-width: 90vw; z-index: 10; }
+.quick { margin-bottom: 12px; }
+.quick .upload { flex: 1; text-align: center; }
+.primary-outline { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+.indent { margin-left: 26px; width: calc(100% - 26px); }
+input.num { display: inline-block; width: 64px; margin: 0 4px; padding: 4px 6px; }
+.savebar { position: sticky; bottom: 0; padding: 10px 0; background: linear-gradient(transparent, var(--bg) 30%); z-index: 3; }
+button.wide { width: 100%; }
+.fx { display: flex; align-items: center; gap: 10px; border-top: 1px solid var(--line); padding: 8px 0; }
+.fx .grow { flex: 1; }
+.fx.off { opacity: .5; }
+.auto { color: var(--accent); font-size: 13px; margin-top: 4px; }
+details.add-fixed summary { cursor: pointer; font-weight: 600; margin-top: 8px; }
+.src-edit { border-top: 1px solid var(--line); padding-top: 6px; margin-top: 6px; }

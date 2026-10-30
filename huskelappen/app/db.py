@@ -43,6 +43,15 @@ CREATE TABLE IF NOT EXISTS settings(
   key TEXT PRIMARY KEY,
   value TEXT
 );
+CREATE TABLE IF NOT EXISTS fixed(
+  id INTEGER PRIMARY KEY,
+  weekdays TEXT,            -- JSON-liste, 0 = mandag
+  title TEXT,
+  bring TEXT,
+  children TEXT,
+  active INTEGER DEFAULT 1,
+  created_at TEXT DEFAULT (datetime('now'))
+);
 CREATE TABLE IF NOT EXISTS sent(
   key TEXT PRIMARY KEY,
   at TEXT DEFAULT (datetime('now'))
@@ -55,7 +64,21 @@ DEFAULT_SETTINGS = {
     # Eksempel: {"name": "Ola", "label": "Ola AB", "groups": ["Avdeling", "Klubb"], "calendar": "calendar.ola"}
     "children": [],
     "ai_entity": "",              # tom = HA sin standard AI-oppgave-entitet
-    "notify_service": "",         # f.eks. notify.mobile_app_olas_telefon – kun denne varsles
+    # Kilder: hvem som sender beskjeder, og hvilke barn de gjelder. Tom = bruk imap_sender fra konfigurasjonen.
+    # Eksempel: {"name": "Skolen", "sender": "skolen.no", "children": ["Ola"]}
+    "sources": [],
+    "notify_service": "",         # f.eks. notify.mobile_app_olas_telefon – hovedmottaker (godkjenning)
+    "notify_extra": "",           # en mottaker til, f.eks. partner
+    "notify_extra_on": False,     # kryss av for at den andre også får varsler
+    "deadline_notify": True,      # varsle før frister
+    "deadline_days": 2,           # så mange dager før fristen
+    "weekly_summary": True,       # oppsummering av uka i søndagsvarselet og på skjermen
+    "weather_entity": "",         # f.eks. weather.forecast_hjem
+    "weather_daily": True,        # vær og klesråd hver hverdag, også uten beskjeder
+    "todo_entity": "",            # handlelista (samme som Matplan bruker)
+    "lunch_days_before": 2,       # legg matpakkemat på lista så mange dager før
+    "learn_reject": True,         # avvis automatisk det du har avvist lignende av to ganger
+    "learn_approve": False,       # godkjenn automatisk det du alltid godkjenner (tre ganger)
     "review_weekday": 6,          # 0 = mandag … 6 = søndag
     "review_time": "18:00",
     "evening_time": "19:00",      # når morgendagens info vises og varsles
@@ -74,8 +97,16 @@ def conn():
         _conn.row_factory = sqlite3.Row
         _conn.execute("PRAGMA journal_mode=WAL")
         _conn.executescript(SCHEMA)
+        _migrate(_conn)
         _conn.commit()
     return _conn
+
+
+def _migrate(c):
+    cols = {r[1] for r in c.execute("PRAGMA table_info(items)")}
+    for col in ("weekdays", "source", "auto_note", "decided_by"):
+        if col not in cols:
+            c.execute(f"ALTER TABLE items ADD COLUMN {col} TEXT")
 
 
 def q(sql, args=()):

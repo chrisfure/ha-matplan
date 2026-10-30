@@ -1,5 +1,4 @@
-"""Tolker e-post og PDF-er fra barnehagen med Claude (via Home Assistant sin AI-oppgave)."""
-import difflib
+"""Tolker e-post, PDF-er og bilder av lapper med Claude (via Home Assistant sin AI-oppgave)."""
 import hashlib
 import json
 import logging
@@ -11,12 +10,13 @@ from datetime import date
 
 import db
 import ha
+import logic
 import util
 from config import MEDIA_DIR, MEDIA_SOURCE_PREFIX
 
 log = logging.getLogger("huskelappen.extract")
 
-KINDS = {"ha_med", "spesiell_dag", "foreldre", "frist", "stengt", "info"}
+KINDS = {"ha_med", "spesiell_dag", "foreldre", "frist", "stengt", "info", "fast"}
 MAX_IMAGES = 6
 
 
@@ -48,13 +48,26 @@ def pdf_images(content, max_pages=3, dpi=110):
         return out
 
 
-def _save_image(content):
+def is_pdf(name, data):
+    return data[:5] == b"%PDF-" or (name or "").lower().endswith(".pdf")
+
+
+def image_type(name, data):
+    if data[:3] == b"\xff\xd8\xff":
+        return "jpg"
+    if data[:8] == b"\x89PNG\r\n\x1a\n":
+        return "png"
+    return None
+
+
+def _save_image(content, ext="jpg"):
     os.makedirs(MEDIA_DIR, exist_ok=True)
-    fname = hashlib.sha256(content).hexdigest()[:20] + ".jpg"
+    fname = hashlib.sha256(content).hexdigest()[:20] + "." + ext
     path = os.path.join(MEDIA_DIR, fname)
     with open(path, "wb") as f:
         f.write(content)
-    return path, {"media_content_id": f"{MEDIA_SOURCE_PREFIX}/{fname}", "media_content_type": "image/jpeg"}
+    mime = "image/png" if ext == "png" else "image/jpeg"
+    return path, {"media_content_id": f"{MEDIA_SOURCE_PREFIX}/{fname}", "media_content_type": mime}
 
 
 # --- Prompt -------------------------------------------------------------------
@@ -64,27 +77,30 @@ def children_text(s):
     for c in s.get("children") or []:
         groups = ", ".join(c.get("groups") or []) or "ukjent"
         label = c.get("label") or c["name"]
-        lines.append(f"- {c['name']}: skrives «{label}» i barnehagens skriv. Avdeling/grupper: {groups}.")
+        lines.append(f"- {c['name']}: skrives «{label}». Avdeling/klasse/grupper: {groups}.")
     return "\n".join(lines)
 
 
-def build_prompt(s, subject, sender, received, body, pdfs, today=None):
+def build_prompt(s, subject, sender, received, body, pdfs, today=None, source_name=None):
     today = today or util.today()
     names = [c["name"] for c in s.get("children") or []]
-    parts = [f"""Du hjelper en familie med å huske ting fra barnehagen ({s.get('kindergarten') or 'barnehagen'}).
-I dag er {util.nice_date(today)} {today.isoformat()}. E-posten kom {util.nice_date(received)} {received.isoformat()}.
+    where = source_name or s.get("kindergarten") or "barnehagen"
+    parts = [f"""Du hjelper en familie med å huske ting fra barnehage, skole og aktiviteter. Denne gangen: {where}.
+I dag er {util.nice_date(today)} {today.isoformat()}. Skrivet kom {util.nice_date(received)} {received.isoformat()}.
 
-Familiens barn i barnehagen:
+Familiens barn som dette kan gjelde:
 {children_text(s)}
 
-Les e-posten og vedleggene (ukeplan/tilbakeblikk som tekst og som bilder av sidene).
+Les e-posten og vedleggene (ukeplan, tilbakeblikk, infoskriv eller bilde av en lapp – som tekst og/eller bilder).
 Finn KUN det foreldrene må gjøre noe med eller huske:
 - ha_med: noe barna skal ha med (klær, sekk, matpakke, drikkeflaske, sitteunderlag, kostyme, leke osv.)
 - spesiell_dag: dager som avviker fra vanlig rutine (tur/turdag, utflukt, fotografering, fest, besøk ut)
 - stengt: barnehagen stengt, planleggingsdag, tidlig stengning
 - foreldre: noe foreldrene skal delta på (foreldresamtale for familiens barn, foreldremøte, dugnad, kafé, temakveld)
 - frist: påmelding, svar eller betaling innen en dato
-- info: annen viktig praktisk beskjed som varer over tid (f.eks. en ny fast ordning)
+- info: annen viktig praktisk beskjed (engangs)
+- fast: noe som gjentar seg HVER uke på bestemte ukedager (f.eks. «gymtøy hver tirsdag», «Ha med-dag hver dag»).
+  Bruk «ukedager» (1 = mandag … 7 = søndag) og sett dato til første dag det gjelder.
 
 Ikke ta med:
 - personalmøter, ped.leder-møter, møtedager for andre avdelinger, plantid og annet som bare gjelder de ansatte
@@ -93,7 +109,7 @@ Ikke ta med:
 - tilbakeblikk på det som har skjedd, takk, hilsener og gratulasjoner
 
 Hvem det gjelder («gjelder»), bruk bare disse navnene: {json.dumps(names, ensure_ascii=False)}
-- noe for hele barnehagen eller hele avdelingen: alle barna i avdelingen
+- noe for hele barnehagen/skolen, avdelingen eller klassen: alle barna der
 - noe for en klubb eller gruppe: bare barna i den gruppen
 - er du usikker: alle barna i avdelingen
 
@@ -107,7 +123,7 @@ Klokkeslett:
 - For barnas ting (f.eks. tur) skrives viktig klokkeslett i tittelen: «Turdag – går kl. 09.30».
 
 Returner KUN JSON:
-{{"punkter":[{{"type":"ha_med|spesiell_dag|stengt|foreldre|frist|info","dato":"YYYY-MM-DD","til_dato":null,"start":null,"slutt":null,"tittel":"kort, maks 40 tegn","ha_med":["..."],"detaljer":"én kort setning","gjelder":["navn"],"kilde":"kort sitat fra skrivet, maks 15 ord"}}]}}
+{{"punkter":[{{"type":"ha_med|spesiell_dag|stengt|foreldre|frist|info|fast","dato":"YYYY-MM-DD","til_dato":null,"ukedager":null,"start":null,"slutt":null,"tittel":"kort, maks 40 tegn","ha_med":["..."],"detaljer":"én kort setning","gjelder":["navn"],"kilde":"kort sitat fra skrivet, maks 15 ord"}}]}}
 Finnes ingenting: {{"punkter":[]}}
 
 E-post
@@ -135,19 +151,27 @@ def run_ai(prompt, attachments):
     return util.extract_json(raw)
 
 
-def read_mail(subject, sender, received, body, attachments, s=None):
-    """attachments: liste av (filnavn, bytes). Returnerer rå punkter fra AI."""
+def read_mail(subject, sender, received, body, attachments, s=None, source_name=None):
+    """attachments: liste av (filnavn, bytes) – PDF eller bilde. Returnerer rå punkter fra AI."""
     s = s or db.all_settings()
     pdfs, images, paths = [], [], []
+
+    def add_image(data, ext="jpg"):
+        if len(images) < MAX_IMAGES:
+            path, att = _save_image(data, ext)
+            paths.append(path)
+            images.append(att)
     try:
         for name, data in attachments:
-            pdfs.append((name, pdf_text(data)))
-            for img in pdf_images(data):
-                if len(images) < MAX_IMAGES:
-                    path, att = _save_image(img)
-                    paths.append(path)
-                    images.append(att)
-        prompt = build_prompt(s, subject, sender, received, body, pdfs)
+            if is_pdf(name, data):
+                pdfs.append((name, pdf_text(data)))
+                for img in pdf_images(data):
+                    add_image(img)
+            elif image_type(name, data):
+                add_image(data, image_type(name, data))
+        if not body.strip() and not pdfs and not images:
+            return []
+        prompt = build_prompt(s, subject, sender, received, body, pdfs, source_name=source_name)
         data = run_ai(prompt, images)
     finally:
         for p in paths:
@@ -160,8 +184,7 @@ def read_mail(subject, sender, received, body, attachments, s=None):
 
 # --- Rydding og lagring -------------------------------------------------------
 
-def _norm(s):
-    return re.sub(r"[^a-zæøå0-9]+", " ", (s or "").lower()).strip()
+_norm = util.norm
 
 
 def _time(v):
@@ -203,6 +226,17 @@ def clean(points, s, today=None):
         if given and not kids:
             continue  # gjelder et annet barn med samme fornavn
         kind = p.get("type") if p.get("type") in KINDS else "info"
+        wds = []
+        for w in p.get("ukedager") or []:
+            try:
+                w = int(w)
+            except (TypeError, ValueError):
+                continue
+            if 1 <= w <= 7:
+                wds.append(w - 1)
+        wds = sorted(set(wds))
+        if kind == "fast" and not wds:
+            wds = [d.weekday()]
         title = (p.get("tittel") or "").strip()[:60] or kind.replace("_", " ").capitalize()
         bring = [str(b).strip() for b in (p.get("ha_med") or []) if str(b).strip()]
         out.append({
@@ -216,18 +250,25 @@ def clean(points, s, today=None):
                                             f"«{p['kilde'].strip()}»" if p.get("kilde") else ""] if x),
             "children": [n for n in all_names if n in kids] or all_names,
             "kind": kind,
+            "weekdays": wds if kind == "fast" else [],
         })
     return out
 
 
-def _similar(a, b):
-    return difflib.SequenceMatcher(None, _norm(a), _norm(b)).ratio() > 0.8
+_similar = util.similar
 
 
-def save(items, msgid, subject):
+def save(items, msgid, subject, source=None):
     """Lagrer nye forslag. Hopper over det som allerede finnes. Returnerer de nye."""
     new = []
     for it in items:
+        wds = it.get("weekdays") or [date.fromisoformat(it["day"]).weekday()]
+        if logic.fixed_covers(it["title"], wds):
+            continue  # dekkes allerede av en fast påminnelse
+        if it["kind"] == "fast" and any(
+                r["kind"] == "fast" and r["status"] != "rejected" and _similar(r["title"], it["title"])
+                for r in db.q("SELECT kind, status, title FROM items WHERE kind='fast'")):
+            continue
         key = f"{it['day']}|{_norm(it['title'])}|{','.join(sorted(it['children']))}"
         same_day = db.q("SELECT title, children FROM items WHERE day=?", (it["day"],))
         if any(_similar(r["title"], it["title"]) and set(json.loads(r["children"])) & set(it["children"])
@@ -236,10 +277,11 @@ def save(items, msgid, subject):
         try:
             iid = db.ex(
                 "INSERT INTO items(msgid, day, end_day, start_time, end_time, title, bring, details, "
-                "children, kind, dedupe_key, source_subject) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+                "children, kind, dedupe_key, source_subject, source, weekdays) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (msgid, it["day"], it["end_day"], it["start_time"], it["end_time"], it["title"],
                  json.dumps(it["bring"], ensure_ascii=False), it["details"],
-                 json.dumps(it["children"], ensure_ascii=False), it["kind"], key, subject),
+                 json.dumps(it["children"], ensure_ascii=False), it["kind"], key, subject, source,
+                 json.dumps(it.get("weekdays") or [])),
             )
         except Exception:  # dedupe_key finnes fra før
             continue

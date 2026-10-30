@@ -1,4 +1,5 @@
 """Små hjelpere: tid, tekst og JSON fra AI-svar."""
+import difflib
 import html
 import json
 import os
@@ -37,6 +38,28 @@ def now():
 
 def today():
     return now().date()
+
+
+WEEKDAYS_SHORT = ["man", "tir", "ons", "tor", "fre", "lør", "søn"]
+
+
+def norm(s):
+    return re.sub(r"[^a-zæøå0-9]+", " ", (s or "").lower()).strip()
+
+
+def similar(a, b, limit=0.8):
+    return difflib.SequenceMatcher(None, norm(a), norm(b)).ratio() > limit
+
+
+def weekdays_text(wds):
+    """[1] → «tirsdager», [0,1,2,3,4] → «alle hverdager»."""
+    wds = sorted(set(int(w) for w in wds or []))
+    if wds == [0, 1, 2, 3, 4]:
+        return "alle hverdager"
+    if wds == list(range(7)):
+        return "hver dag"
+    names = [WEEKDAYS[w] + "er" for w in wds]
+    return names[0] if len(names) == 1 else ", ".join(names[:-1]) + " og " + names[-1]
 
 
 def nice_date(d):
