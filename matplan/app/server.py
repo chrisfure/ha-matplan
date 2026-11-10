@@ -16,6 +16,7 @@ import db
 import ha
 import logic
 import mailer
+import trumf
 from config import DEV, INGRESS_IP, PORT
 
 log = logging.getLogger("matplan.http")
@@ -84,6 +85,7 @@ def api_state(req, body):
         "settings": s,
         "counts": counts,
         "mail": {"enabled": mailer.enabled(), **mailer.status},
+        "trumf": {"enabled": trumf.enabled(), **trumf.status},
         "dinner_calendar": logic.dinner_calendar_entity(),
         "calendar_sync": db.get_setting("calendar_sync"),
         "today": logic.today().isoformat(),
@@ -232,6 +234,11 @@ def api_upload(req, body):
 @route("POST", "/api/mail/poll")
 def api_mail_poll(req, body):
     return start_job("mail", lambda p: mailer.poll(p))
+
+
+@route("POST", "/api/trumf/poll")
+def api_trumf_poll(req, body):
+    return start_job("trumf", lambda p: trumf.poll(p))
 
 
 @route("POST", "/api/normalize")

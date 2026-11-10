@@ -1,5 +1,5 @@
 name: Matplan
-version: "0.18.1"
+version: "0.19.0"
 slug: matplan
 description: Kvitteringer, handleliste og middagsforslag ut fra det dere har og kalenderen
 arch:
@@ -24,6 +24,7 @@ options:
   imap_folder: Matplan
   imap_interval_minutes: 15
   imap_since_days: 365
+  trumf_since_days: 365
 schema:
   imap_enabled: bool
   imap_host: str
@@ -35,3 +36,5 @@ schema:
   oda_email: str?
   oda_password: password?
   kassalapp_api_key: password?
+  trumf_cookie: password?
+  trumf_since_days: int(1,400)

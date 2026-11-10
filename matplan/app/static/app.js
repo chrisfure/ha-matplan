@@ -1191,7 +1191,7 @@ async function searchReceipts() {
     <div class="card list">${g.items.map((r) => `
       <div class="row click" data-rid="${r.id}">
         <div class="main"><div class="name">${esc(state.rcSort === "store" ? fmtDate(r.purchased_on) : r.store + " · " + fmtDate(r.purchased_on))}</div>
-        <div class="info">${r.items} varer${r.total ? " · " + nok(r.total) : ""} · ${r.source === "email" ? "e-post" : "opplastet"}${r.uploaded_by ? " av " + esc(r.uploaded_by) : ""}</div>
+        <div class="info">${r.items} varer${r.total ? " · " + nok(r.total) : ""} · ${r.source === "trumf" ? "hentet fra Trumf" : (r.source === "email" ? "e-post" : "opplastet") + (r.uploaded_by ? " av " + esc(r.uploaded_by) : "")}</div>
         ${(r.hits || []).length ? `<div class="hits">${r.hits.slice(0, 4).map((h) =>
           `<span>${esc(h.name)}${h.qty && h.qty !== 1 ? " · " + esc(h.qty) + "×" : ""}${h.price != null ? " · " + nok(h.price) : ""}</span>`).join("")}${r.hits.length > 4 ? `<span>+ ${r.hits.length - 4} til</span>` : ""}</div>` : ""}
         </div>
@@ -1211,6 +1211,18 @@ function renderMailbox(st) {
     ? `<button class="ghost wide" id="btn-mail">✉️ Hent kvitteringer fra e-post nå</button>
        <p class="hint">${m.last_run ? `Sist hentet ${esc(m.last_run.replace("T", " kl. "))}: ${esc(m.error ? "feil – " + m.error : m.last_result || "")}` : "Hentes automatisk."}</p>${pend}`
     : `<p class="hint">Tips: Slå på e-posthenting i app-innstillingene i Home Assistant, så kommer Oda-kvitteringer og videresendte kvitteringer inn automatisk.</p>${pend}`;
+  const t = st.trumf || {};
+  if (t.enabled) {
+    $("#mailbox").insertAdjacentHTML("afterbegin",
+      `<button class="ghost wide" id="btn-trumf">🧾 Hent kvitteringer fra Trumf nå</button>
+       <p class="hint">${t.last_run ? `Sist hentet ${esc(t.last_run.replace("T", " kl. "))}: ${esc(t.error ? "feil – " + t.error : t.last_result || "")}` : "Trumf (Kiwi, Meny, Spar, Joker) hentes automatisk."}</p>`);
+    const tb = $("#btn-trumf");
+    tb.onclick = async () => {
+      tb.disabled = true;
+      try { toast(await runJob(api("trumf/poll", { body: {} }), $("#up-job")), 5000); } catch (_) {}
+      loadReceipts();
+    };
+  }
   const b = $("#btn-mail");
   if (b) b.onclick = async () => {
     b.disabled = true;
@@ -1734,6 +1746,7 @@ function renderGuide() {
       <ul>
         <li><b>📷 Ta bilde</b> av papirkvittering, eller <b>last opp</b> skjermbilde/PDF fra Trumf- eller Coop-appen.</li>
         <li><b>Oda</b> kommer automatisk på e-post.</li>
+        <li><b>Kiwi, Meny, Spar og Joker</b> kan hentes automatisk fra Trumf (settes opp én gang, se Dokumentasjon i app-innstillingene). Coop må fortsatt lastes opp.</li>
         <li>Andre kvitteringer kan <b>videresendes</b> til ${mailTxt}.</li>
         <li><b>Søk</b> f.eks. «melk» for å se alle kvitteringer med melk og hva det har kostet.</li>
         <li>Øverst står <b>snitt per måned</b> (regnet av hele måneder) og hva vi har brukt denne måneden. ▲/▼ ved hver måned viser om den var dyrere eller billigere enn snittet.</li>

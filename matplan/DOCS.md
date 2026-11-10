@@ -16,6 +16,8 @@ Appen dukker opp som **Matplan** i sidemenyen, og alle brukere i Home Assistant 
 - **Bilde eller PDF:** Fanen *Kvitteringer* → «Ta bilde» eller «Last opp». Fungerer fint med skjermbilder fra Trumf-appen (Kiwi) og Coop-appen.
 - **Søk og sortering:** Søk etter en vare, for eksempel «melk», eller en butikk. Da vises alle kvitteringer som inneholder søket, med varelinjene som traff og hva dere har brukt på dem. Du kan filtrere på butikk og sortere på dato (nyeste eller eldste først), butikk eller beløp. Listen er gruppert per måned eller per butikk, med summer.
 - **E-post:** Se under. Oda-kvitteringer leses direkte uten AI. Andre kvitteringer, også videresendte skjermbilder, tolkes av Claude.
+- **Trumf (Kiwi, Meny, Spar, Joker):** Kan hentes automatisk, se «Kvitteringer fra Trumf» under.
+- **Coop:** Må fortsatt lastes opp som skjermbilde eller videresendes. Coop-appen er låst slik at andre programmer ikke får hentet kvitteringene.
 
 ## Kvitteringer fra e-post (Gmail)
 
@@ -26,6 +28,22 @@ Appen dukker opp som **Matplan** i sidemenyen, og alle brukere i Home Assistant 
 5. I Home Assistant går du til **Innstillinger → Apper → Matplan → Konfigurasjon**. Slå på e-posthenting, og fyll inn e-postadresse og app-passord. Trykk «Vis ubrukte valgfrie» hvis feltene ikke vises. Lagre og start appen på nytt.
 
 Første henting går gjennom historikken (365 dager som standard), og det kan ta noen minutter. Etter det sjekkes e-posten hvert 15. minutt.
+
+## Kvitteringer fra Trumf (valgfritt)
+
+Matplan kan hente kvitteringene fra Kiwi, Meny, Spar og Joker direkte fra Trumf-siden din, uten AI og uten bilder. Trumf har ikke noe åpent API, så Matplan leser de samme sidene du ser når du er logget inn på trumf.no. Til det trenger den innloggingskaken (cookie) fra nettleseren din. Matplan får aldri passordet ditt, leser bare kvitteringene og kan ikke endre noe hos Trumf.
+
+1. Åpne **trumf.no** i Chrome eller Edge på en PC eller Mac, og logg inn. Gå til *Min side → Kvitteringer* og sjekk at kjøpene vises.
+2. Trykk **F12** (Mac: ⌥⌘I) og velg fanen **Network** (Nettverk). Last siden på nytt.
+3. Klikk på den øverste linjen i lista (`kvitteringer`). Under **Request Headers** finner du **Cookie**. Kopier hele verdien. Den er lang og skal inneholde `session-token`.
+4. I Home Assistant går du til **Innstillinger → Apper → Matplan → Konfigurasjon**. Trykk «Vis ubrukte valgfrie», lim verdien inn i **Trumf – Cookie fra innlogget nettleser**, lagre og start appen på nytt.
+5. Åpne Matplan → *Kvitteringer* → **Hent kvitteringer fra Trumf nå**.
+
+- Første henting tar med alt Trumf viser (opptil 12 måneder) og bruker et par sekunder per kvittering. Etter det sjekkes Trumf hver 6. time.
+- Kvitteringer som allerede er lagt inn fra bilde (samme butikk, dato og sum), hoppes over.
+- Kaken varer omtrent ett år. Når den går ut, eller hvis du logger ut på trumf.no, står det «Innloggingen hos Trumf er utløpt» under knappen. Da gjentar du steg 1–4.
+- Kaken gir tilgang til Trumf-kontoen din. Behandle den som et passord, og lim den bare inn i app-innstillingene.
+- Dette er uoffisielt. Endrer Trumf sidene sine, stopper hentingen med en feilmelding til appen er oppdatert. Bilde og opplasting fungerer uansett.
 
 ## Handleliste fra Google Keep (valgfritt)
 
@@ -167,4 +185,5 @@ Finner ikke appen kalenderen, må den være slått på i Google Calendar-integra
 
 - **«AI-oppgaven returnerte ikke noe svar» eller avkuttet JSON:** Øk «Maksimalt antall tokens» i Anthropic-integrasjonen til minst 4000.
 - **Bilder blir ikke lest:** AI-oppgaven må støtte vedlegg (Anthropic-integrasjonen gjør det). Bildene lagres i `/media/matplan`.
+- **«Innloggingen hos Trumf er utløpt»:** Hent en ny Cookie-verdi, se «Kvitteringer fra Trumf».
 - **Loggen** finner du under Innstillinger → Apper → Matplan → Logg.

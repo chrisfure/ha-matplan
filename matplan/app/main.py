@@ -9,6 +9,7 @@ import db
 import logic
 import mailer
 import server
+import trumf
 
 
 def sensor_loop():
@@ -38,6 +39,7 @@ logging.basicConfig(
 if __name__ == "__main__":
     db.conn()
     mailer.start_scheduler()
+    trumf.start_scheduler()
     threading.Thread(target=calendar_sync_loop, daemon=True, name="calendar-sync").start()
     threading.Thread(target=sensor_loop, daemon=True, name="sensor").start()
     server.run()
