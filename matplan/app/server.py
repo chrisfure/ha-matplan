@@ -16,6 +16,7 @@ import db
 import ha
 import logic
 import mailer
+import rema
 import trumf
 from config import DEV, INGRESS_IP, PORT
 
@@ -85,7 +86,8 @@ def api_state(req, body):
         "settings": s,
         "counts": counts,
         "mail": {"enabled": mailer.enabled(), **mailer.status},
-        "trumf": {"enabled": trumf.enabled(), **trumf.status},
+        "trumf": trumf.public_status(),
+        "rema": rema.public_status(),
         "dinner_calendar": logic.dinner_calendar_entity(),
         "calendar_sync": db.get_setting("calendar_sync"),
         "today": logic.today().isoformat(),
@@ -239,6 +241,42 @@ def api_mail_poll(req, body):
 @route("POST", "/api/trumf/poll")
 def api_trumf_poll(req, body):
     return start_job("trumf", lambda p: trumf.poll(p))
+
+
+@route("POST", "/api/rema/poll")
+def api_rema_poll(req, body):
+    return start_job("rema", lambda p: rema.poll(p))
+
+
+@route("GET", "/api/stores")
+def api_stores(req, body):
+    return {"trumf": trumf.public_status(), "rema": rema.public_status()}
+
+
+@route("POST", "/api/rema/login")
+def api_rema_login(req, body):
+    try:
+        return {"url": rema.start_login((body or {}).get("slot"))}
+    except rema.RemaError as e:
+        raise ApiError(str(e))
+
+
+@route("POST", "/api/rema/complete")
+def api_rema_complete(req, body):
+    try:
+        rema.complete_login((body or {}).get("slot"), (body or {}).get("pasted"))
+    except rema.RemaError as e:
+        raise ApiError(str(e))
+    return api_stores(req, None)
+
+
+@route("POST", "/api/rema/disconnect")
+def api_rema_disconnect(req, body):
+    try:
+        rema.disconnect((body or {}).get("slot"))
+    except rema.RemaError as e:
+        raise ApiError(str(e))
+    return api_stores(req, None)
 
 
 @route("POST", "/api/normalize")

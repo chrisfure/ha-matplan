@@ -349,7 +349,7 @@ table.ptable tbody tr:hover { background: var(--bg); }
 button.compare { background: var(--card); color: var(--accent); border: 2px solid var(--accent); font-weight: 600; margin-top: 6px; box-shadow: 0 1px 3px rgba(0,0,0,.12); }
 table.cmp td small.miss { color: var(--warn); }
 
-#storealert[hidden] { display: none; }
+#storealert[hidden], #stores[hidden] { display: none; }
 .sa-status { margin: 10px 0; padding: 10px 12px; border-radius: 10px; background: var(--chip); font-size: 14px; font-weight: 600; }
 .sa-status.on { background: var(--accent-soft); color: var(--accent); }
 .sa-status.off { background: var(--warn-soft); color: var(--warn); }
@@ -358,7 +358,7 @@ table.cmp td small.miss { color: var(--warn); }
 .sa-rad input { width: 78px; margin: 0; padding: 7px 8px; }
 .row select.sa-notify { width: auto; max-width: 55%; margin: 0; font-size: 14px; padding: 7px 8px; }
 pre.code { background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; font-size: 13px; overflow-x: auto; }
-@media (min-width: 1000px) { #storealert { max-width: 720px; } }
+@media (min-width: 1000px) { #storealert, #stores { max-width: 720px; } }
 
 /* Lager: søk + visningsmeny, grupper og én-linjes rader */
 .pbar { display: flex; gap: 8px; align-items: stretch; }

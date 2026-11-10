@@ -35,7 +35,7 @@ log = logging.getLogger("matplan.trumf")
 HOST = "www.trumf.no"
 BASE = "https://" + HOST
 LIST_PATH = "/trumf-profil/kvitteringer"
-COOKIE_FILE = os.path.join(DATA_DIR, "trumf_cookies.json")
+SLOTS = (1, 2)          # to Trumf-kontoer, f.eks. én per voksen
 UA = ("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) "
       "Chrome/131.0.0.0 Safari/537.36")
 INTERVAL_HOURS = 6
@@ -48,7 +48,7 @@ CHAINS = {"kiwi": "Kiwi", "meny": "Meny", "spar": "Spar", "eurospar": "Spar", "j
 UNITS = {"ea": "stk", "stk": "stk", "kg": "kg", "kgm": "kg", "l": "l", "ltr": "l"}
 
 _lock = threading.Lock()
-status = {"last_run": None, "last_result": None, "error": None}
+status = {"last_run": None, "last_result": None, "error": None, "accounts": {}}
 
 
 class TrumfError(Exception):
@@ -65,14 +65,34 @@ class NotLoggedIn(TrumfError):
 
 # --- Innloggingskake ----------------------------------------------------------
 
-def _option_cookie():
-    raw = str(load_options().get("trumf_cookie") or "").strip()
+def _cookie_file(slot):
+    return os.path.join(DATA_DIR, "trumf_cookies.json" if slot == 1 else f"trumf_cookies_{slot}.json")
+
+
+def _option_cookie(slot=1):
+    key = "trumf_cookie" if slot == 1 else f"trumf_cookie_{slot}"
+    raw = str(load_options().get(key) or "").strip()
     raw = re.sub(r"^cookie:\s*", "", raw, flags=re.I)
     return " ".join(raw.split())
 
 
+def configured(slot):
+    return "session-token" in _option_cookie(slot)
+
+
+def accounts():
+    """Kontoene som er satt opp, som liste med kontonummer."""
+    return [s for s in SLOTS if configured(s)]
+
+
 def enabled():
-    return "session-token" in _option_cookie()
+    return bool(accounts())
+
+
+def public_status():
+    """Status uten hemmeligheter, til visning i appen."""
+    return {**{k: v for k, v in status.items() if k != "accounts"}, "enabled": enabled(),
+            "accounts": [{"slot": s, "configured": configured(s), **status["accounts"].get(s, {})} for s in SLOTS]}
 
 
 def _parse_cookie_header(raw):
@@ -85,13 +105,14 @@ def _parse_cookie_header(raw):
     return out
 
 
-def _load_cookies():
+def _load_cookies(slot=1):
     """Kakene fra innstillingene, oppdatert med det Trumf har fornyet underveis.
-    Limes en ny verdi inn i innstillingene, starter vi på nytt fra den."""
-    raw = _option_cookie()
-    sig = hashlib.sha256(raw.encode()).hexdigest()
+    Limes en ny verdi inn i innstillingene, starter vi på nytt fra den.
+    Returnerer (nøkkel, kaker) der nøkkelen sier hvilken konto og hvilken innlimt verdi det gjelder."""
+    raw = _option_cookie(slot)
+    sig = f"{slot}:" + hashlib.sha256(raw.encode()).hexdigest()
     try:
-        with open(COOKIE_FILE, encoding="utf-8") as f:
+        with open(_cookie_file(slot), encoding="utf-8") as f:
             saved = json.load(f)
         if saved.get("sig") == sig and isinstance(saved.get("cookies"), dict):
             return sig, saved["cookies"]
@@ -102,10 +123,11 @@ def _load_cookies():
 
 def _save_cookies(sig, cookies):
     try:
+        path = _cookie_file(int(sig.split(":", 1)[0]))
         os.makedirs(DATA_DIR, exist_ok=True)
-        with open(COOKIE_FILE, "w", encoding="utf-8") as f:
+        with open(path, "w", encoding="utf-8") as f:
             json.dump({"sig": sig, "cookies": cookies}, f)
-        os.chmod(COOKIE_FILE, 0o600)
+        os.chmod(path, 0o600)
     except Exception as e:
         log.warning("Kunne ikke lagre Trumf-kaker: %s", e)
 
@@ -345,72 +367,89 @@ def poll(progress=None):
 
 
 def _poll(progress):
-    if not enabled():
+    slots = accounts()
+    if not slots:
         return "Trumf er ikke satt opp (lim inn Cookie-verdien i app-innstillingene i Home Assistant)"
     status["last_run"] = logic.now().isoformat(timespec="minutes")
-    try:
-        sig, cookies = _load_cookies()
+    results, errors, saved_total = [], [], 0
+    for slot in slots:
+        label = f"Konto {slot}: " if len(slots) > 1 else ""
+        try:
+            saved, text = _poll_account(slot, progress, label)
+            saved_total += saved
+            status["accounts"][slot] = {"last_result": text, "error": None}
+            results.append(label + text)
+        except Exception as e:
+            log.warning("Trumf-henting feilet (konto %s): %s", slot, e)
+            status["accounts"][slot] = {"last_result": None, "error": str(e)}
+            errors.append(label + str(e))
+    if saved_total:
+        logic.normalize_pending(progress)
+    status.update(last_result="; ".join(results) or None, error="; ".join(errors) or None)
+    if errors and not results:
+        raise TrumfError("; ".join(errors))
+    return "; ".join(results + ["Feil – " + e for e in errors])
+
+
+def _poll_account(slot, progress, label=""):
+    """Henter nye kvitteringer for én konto. Returnerer (antall lagret, tekst)."""
+    sig, cookies = _load_cookies(slot)
+    if progress:
+        progress(f"{label}Henter kjøpslista fra Trumf")
+    page = _fetch(LIST_PATH, sig, cookies)
+    txs = parse_transactions(page)
+    if txs is None:
+        if "transactionsData" in page:
+            raise TrumfError("Trumf har endret sideformatet – Matplan klarer ikke å lese kjøpslista lenger")
+        raise NotLoggedIn()
+    since = (logic.today() - timedelta(days=int(load_options().get("trumf_since_days") or 365))).isoformat()
+    # Leses på nytt for hver konto: to kontoer i samme husstand kan vise de samme kjøpene
+    seen = {r["msgid"] for r in db.q("SELECT msgid FROM mail_seen WHERE msgid LIKE 'trumf:%'")}
+    seen |= {r["source_ref"] for r in db.q("SELECT source_ref FROM receipts WHERE source_ref LIKE 'trumf:%'")}
+    todo = []
+    for tx in txs:
+        ref = "trumf:" + str(_clean(tx.get("batchId")))
+        d = _local_date(tx.get("transaksjonsTidspunkt"))
+        if ref in seen or _clean(tx.get("harKvittering")) is False or (d and d < since):
+            continue
+        todo.append((ref, tx))
+    todo = todo[:MAX_PER_RUN]
+    by = "Trumf" if slot == 1 else f"Trumf (konto {slot})"
+    saved = skipped = failed = 0
+    for idx, (ref, tx) in enumerate(todo):
         if progress:
-            progress("Henter kjøpslista fra Trumf")
-        page = _fetch(LIST_PATH, sig, cookies)
-        txs = parse_transactions(page)
-        if txs is None:
-            if "transactionsData" in page:
-                raise TrumfError("Trumf har endret sideformatet – Matplan klarer ikke å lese kjøpslista lenger")
-            raise NotLoggedIn()
-        since = (logic.today() - timedelta(days=int(load_options().get("trumf_since_days") or 365))).isoformat()
-        seen = {r["msgid"] for r in db.q("SELECT msgid FROM mail_seen WHERE msgid LIKE 'trumf:%'")}
-        seen |= {r["source_ref"] for r in db.q("SELECT source_ref FROM receipts WHERE source_ref LIKE 'trumf:%'")}
-        todo = []
-        for tx in txs:
-            ref = "trumf:" + str(_clean(tx.get("batchId")))
-            d = _local_date(tx.get("transaksjonsTidspunkt"))
-            if ref in seen or _clean(tx.get("harKvittering")) is False or (d and d < since):
-                continue
-            todo.append((ref, tx))
-        todo = todo[:MAX_PER_RUN]
-        saved = skipped = failed = 0
-        for idx, (ref, tx) in enumerate(todo):
-            if progress:
-                progress(f"Leser Trumf-kvittering {idx + 1} av {len(todo)}")
-            if idx:
-                time.sleep(PAUSE_SECONDS)
-            try:
-                batch = str(_clean(tx.get("batchId")))
-                detail_page = _fetch(f"{LIST_PATH}/{urllib.parse.quote(batch, safe='')}", sig, cookies)
-                details = parse_receipt(detail_page)
-                if details is None:
-                    raise TrumfError("fant ikke kvitteringsdata på siden")
-                data = to_receipt(tx, details)
-                rid, res = None, "Ingen varelinjer"
-                if data is not None:
-                    rid, res = logic.save_receipt(data, "trumf", data["ref"], "Trumf", logic.today())
-            except NotLoggedIn:
-                raise
-            except Exception as e:
-                # prøves igjen neste runde
-                log.warning("Trumf-kvittering %s feilet: %s", ref, e)
-                failed += 1
-                continue
-            if rid:
-                saved += 1
-            else:
-                skipped += 1
-            db.ex("INSERT OR REPLACE INTO mail_seen(msgid, result) VALUES(?,?)", (ref, res))
-            log.info("Trumf %s: %s", ref, res)
-        if saved:
-            logic.normalize_pending(progress)
-        result = "1 ny kvittering fra Trumf" if saved == 1 else f"{saved} nye kvitteringer fra Trumf"
-        if skipped:
-            result += f", {skipped} hoppet over (fantes fra før eller uten varer)"
-        if failed:
-            result += f", {failed} feilet (prøves igjen)"
-        status.update(last_result=result, error=None)
-        return result
-    except Exception as e:
-        status["error"] = str(e)
-        log.warning("Trumf-henting feilet: %s", e)
-        raise
+            progress(f"{label}Leser Trumf-kvittering {idx + 1} av {len(todo)}")
+        if idx:
+            time.sleep(PAUSE_SECONDS)
+        try:
+            batch = str(_clean(tx.get("batchId")))
+            detail_page = _fetch(f"{LIST_PATH}/{urllib.parse.quote(batch, safe='')}", sig, cookies)
+            details = parse_receipt(detail_page)
+            if details is None:
+                raise TrumfError("fant ikke kvitteringsdata på siden")
+            data = to_receipt(tx, details)
+            rid, res = None, "Ingen varelinjer"
+            if data is not None:
+                rid, res = logic.save_receipt(data, "trumf", data["ref"], by, logic.today())
+        except NotLoggedIn:
+            raise
+        except Exception as e:
+            # prøves igjen neste runde
+            log.warning("Trumf-kvittering %s feilet: %s", ref, e)
+            failed += 1
+            continue
+        if rid:
+            saved += 1
+        else:
+            skipped += 1
+        db.ex("INSERT OR REPLACE INTO mail_seen(msgid, result) VALUES(?,?)", (ref, res))
+        log.info("Trumf %s: %s", ref, res)
+    result = "1 ny kvittering fra Trumf" if saved == 1 else f"{saved} nye kvitteringer fra Trumf"
+    if skipped:
+        result += f", {skipped} hoppet over (fantes fra før eller uten varer)"
+    if failed:
+        result += f", {failed} feilet (prøves igjen)"
+    return saved, result
 
 
 def start_scheduler():

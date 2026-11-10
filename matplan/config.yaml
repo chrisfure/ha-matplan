@@ -1,5 +1,5 @@
 name: Matplan
-version: "0.19.0"
+version: "0.20.0"
 slug: matplan
 description: Kvitteringer, handleliste og middagsforslag ut fra det dere har og kalenderen
 arch:
@@ -37,4 +37,5 @@ schema:
   oda_password: password?
   kassalapp_api_key: password?
   trumf_cookie: password?
+  trumf_cookie_2: password?
   trumf_since_days: int(1,400)

@@ -8,6 +8,7 @@ import time
 import db
 import logic
 import mailer
+import rema
 import server
 import trumf
 
@@ -40,6 +41,7 @@ if __name__ == "__main__":
     db.conn()
     mailer.start_scheduler()
     trumf.start_scheduler()
+    rema.start_scheduler()
     threading.Thread(target=calendar_sync_loop, daemon=True, name="calendar-sync").start()
     threading.Thread(target=sensor_loop, daemon=True, name="sensor").start()
     server.run()

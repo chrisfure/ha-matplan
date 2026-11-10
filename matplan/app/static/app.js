@@ -1191,7 +1191,7 @@ async function searchReceipts() {
     <div class="card list">${g.items.map((r) => `
       <div class="row click" data-rid="${r.id}">
         <div class="main"><div class="name">${esc(state.rcSort === "store" ? fmtDate(r.purchased_on) : r.store + " · " + fmtDate(r.purchased_on))}</div>
-        <div class="info">${r.items} varer${r.total ? " · " + nok(r.total) : ""} · ${r.source === "trumf" ? "hentet fra Trumf" : (r.source === "email" ? "e-post" : "opplastet") + (r.uploaded_by ? " av " + esc(r.uploaded_by) : "")}</div>
+        <div class="info">${r.items} varer${r.total ? " · " + nok(r.total) : ""} · ${r.source === "trumf" || r.source === "rema" ? "hentet fra " + esc(r.uploaded_by || r.source) : (r.source === "email" ? "e-post" : "opplastet") + (r.uploaded_by ? " av " + esc(r.uploaded_by) : "")}</div>
         ${(r.hits || []).length ? `<div class="hits">${r.hits.slice(0, 4).map((h) =>
           `<span>${esc(h.name)}${h.qty && h.qty !== 1 ? " · " + esc(h.qty) + "×" : ""}${h.price != null ? " · " + nok(h.price) : ""}</span>`).join("")}${r.hits.length > 4 ? `<span>+ ${r.hits.length - 4} til</span>` : ""}</div>` : ""}
         </div>
@@ -1211,18 +1211,22 @@ function renderMailbox(st) {
     ? `<button class="ghost wide" id="btn-mail">✉️ Hent kvitteringer fra e-post nå</button>
        <p class="hint">${m.last_run ? `Sist hentet ${esc(m.last_run.replace("T", " kl. "))}: ${esc(m.error ? "feil – " + m.error : m.last_result || "")}` : "Hentes automatisk."}</p>${pend}`
     : `<p class="hint">Tips: Slå på e-posthenting i app-innstillingene i Home Assistant, så kommer Oda-kvitteringer og videresendte kvitteringer inn automatisk.</p>${pend}`;
-  const t = st.trumf || {};
-  if (t.enabled) {
+  // Butikk-kontoer (Trumf, Rema): én knapp per kjede som er satt opp
+  [["trumf", "Trumf", "Trumf (Kiwi, Meny, Spar, Joker) hentes automatisk."],
+   ["rema", "Rema 1000", "Rema 1000 hentes automatisk."]].reverse().forEach(([key, name, idle]) => {
+    const t = st[key] || {};
+    if (!t.enabled) return;
+    const last = [t.last_result, t.error ? "feil – " + t.error : ""].filter(Boolean).join("; ");
     $("#mailbox").insertAdjacentHTML("afterbegin",
-      `<button class="ghost wide" id="btn-trumf">🧾 Hent kvitteringer fra Trumf nå</button>
-       <p class="hint">${t.last_run ? `Sist hentet ${esc(t.last_run.replace("T", " kl. "))}: ${esc(t.error ? "feil – " + t.error : t.last_result || "")}` : "Trumf (Kiwi, Meny, Spar, Joker) hentes automatisk."}</p>`);
-    const tb = $("#btn-trumf");
+      `<button class="ghost wide" id="btn-${key}">🧾 Hent kvitteringer fra ${name} nå</button>
+       <p class="hint">${t.last_run ? `Sist hentet ${esc(t.last_run.replace("T", " kl. "))}: ${esc(last)}` : idle}</p>`);
+    const tb = $("#btn-" + key);
     tb.onclick = async () => {
       tb.disabled = true;
-      try { toast(await runJob(api("trumf/poll", { body: {} }), $("#up-job")), 5000); } catch (_) {}
+      try { toast(await runJob(api(key + "/poll", { body: {} }), $("#up-job")), 5000); } catch (_) {}
       loadReceipts();
     };
-  }
+  });
   const b = $("#btn-mail");
   if (b) b.onclick = async () => {
     b.disabled = true;
@@ -1688,7 +1692,8 @@ function loadMore() {
   $("#guide").hidden = state.moreView !== "guide";
   $("#settings").hidden = state.moreView !== "settings";
   $("#storealert").hidden = state.moreView !== "settings";
-  if (state.moreView === "guide") renderGuide(); else { loadSettings(); loadStoreAlert(); }
+  $("#stores").hidden = state.moreView !== "settings";
+  if (state.moreView === "guide") renderGuide(); else { loadSettings(); loadStores(); loadStoreAlert(); }
 }
 $("#more-seg").addEventListener("click", (e) => {
   const b = e.target.closest("button[data-m]");
@@ -1746,7 +1751,7 @@ function renderGuide() {
       <ul>
         <li><b>📷 Ta bilde</b> av papirkvittering, eller <b>last opp</b> skjermbilde/PDF fra Trumf- eller Coop-appen.</li>
         <li><b>Oda</b> kommer automatisk på e-post.</li>
-        <li><b>Kiwi, Meny, Spar og Joker</b> kan hentes automatisk fra Trumf (settes opp én gang, se Dokumentasjon i app-innstillingene). Coop må fortsatt lastes opp.</li>
+        <li><b>Rema 1000</b> og <b>Trumf</b> (Kiwi, Meny, Spar, Joker) kan hentes automatisk, med to kontoer hver. Settes opp én gang under Mer → Innstillinger → Butikk-kontoer. Coop må fortsatt lastes opp.</li>
         <li>Andre kvitteringer kan <b>videresendes</b> til ${mailTxt}.</li>
         <li><b>Søk</b> f.eks. «melk» for å se alle kvitteringer med melk og hva det har kostet.</li>
         <li>Øverst står <b>snitt per måned</b> (regnet av hele måneder) og hva vi har brukt denne måneden. ▲/▼ ved hver måned viser om den var dyrere eller billigere enn snittet.</li>
@@ -1879,6 +1884,70 @@ async function loadSettings() {
       toast("Lagret");
     } catch (e) { toast(e.message); }
   };
+}
+
+// ---------------------------------------------------------------- Butikk-kontoer (Trumf, Rema)
+async function loadStores(data) {
+  const el = $("#stores");
+  let d = data;
+  if (!d) {
+    try { d = await api("stores"); } catch (e) { el.innerHTML = `<div class="card job err">${esc(e.message)}</div>`; return; }
+  }
+  const note = (a) => a.error ? `<div class="info" style="color:var(--bad, #b00020)">${esc(a.error)}</div>` : (a.last_result ? `<div class="info">${esc(a.last_result)}</div>` : "");
+  el.innerHTML = `
+    <div class="card form">
+      <h3 style="margin:0">🧾 Butikk-kontoer</h3>
+      <p class="hint">Henter kvitteringer automatisk, uten bilder. Matplan kan bare lese kvitteringene – aldri handle, bestille eller endre noe. To kontoer per kjede, for eksempel én per voksen.</p>
+      <label class="field">Rema 1000<small>Logg inn med mobilnummer og kode på SMS, slik som i Æ-appen.</small></label>
+      <div class="list">${d.rema.accounts.map((a) => `
+        <div class="row"><div class="main"><div class="name">Konto ${a.slot}</div>
+          <div class="info">${a.connected ? "✅ Koblet til" + (a.connected_at ? " " + esc(a.connected_at.slice(0, 10)) : "") : "Ikke koblet til"}</div>${note(a)}</div>
+          ${a.connected ? `<button class="small" data-rema-off="${a.slot}">Koble fra</button>` : `<button class="small" data-rema-on="${a.slot}">Koble til</button>`}
+        </div>`).join("")}</div>
+      <label class="field">Trumf (Kiwi, Meny, Spar, Joker)<small>Settes opp i Home Assistant: Innstillinger → Apper → Matplan → Konfigurasjon. Se «Kvitteringer fra Trumf» i dokumentasjonen der.</small></label>
+      <div class="list">${d.trumf.accounts.map((a) => `
+        <div class="row"><div class="main"><div class="name">Konto ${a.slot}</div>
+          <div class="info">${a.configured ? "✅ Satt opp" : "Ikke satt opp"}</div>${note(a)}</div></div>`).join("")}</div>
+      <p class="hint">Coop kan ikke hentes automatisk – Coop-appen er låst for andre programmer. Last opp skjermbilde eller videresend som før.</p>
+    </div>`;
+  $$("[data-rema-on]", el).forEach((b) => b.onclick = () => remaConnect(+b.dataset.remaOn));
+  $$("[data-rema-off]", el).forEach((b) => b.onclick = async () => {
+    if (!confirm(`Koble fra Rema-konto ${b.dataset.remaOff}? Kvitteringene som er hentet, blir liggende.`)) return;
+    try { loadStores(await api("rema/disconnect", { body: { slot: +b.dataset.remaOff } })); state.me = await api("state"); } catch (e) { toast(e.message); }
+  });
+}
+
+async function remaConnect(slot) {
+  let r;
+  try { r = await api("rema/login", { body: { slot } }); } catch (e) { return toast(e.message); }
+  modal(`
+    <h3>Koble til Rema 1000 – konto ${slot}</h3>
+    <ol>
+      <li>Gjør dette på en <b>PC eller Mac</b>. På en telefon med Æ-appen kan innloggingen hoppe over i appen.</li>
+      <li><a href="${esc(r.url)}" target="_blank" rel="noopener noreferrer"><b>Åpne Rema-innloggingen</b></a> og logg inn med mobilnummeret til den som eier kontoen, og koden dere får på SMS.</li>
+      <li>Etterpå havner du på en nesten tom side. <b>Kopier hele adressen</b> fra adressefeltet (den inneholder «code=») og lim den inn her med en gang – koden varer bare kort tid.</li>
+    </ol>
+    <input type="text" id="rema-paste" placeholder="https://ae-appen.appspot.com/redirect/redirect.html?code=…" autocomplete="off">
+    <div class="job err" id="rema-err" hidden></div>
+    <div class="two"><button class="ghost" id="rema-cancel">Avbryt</button><button class="primary" id="rema-done">Fullfør</button></div>`,
+  (m) => {
+    $("#rema-cancel", m).onclick = closeModal;
+    $("#rema-done", m).onclick = async () => {
+      const btn = $("#rema-done", m);
+      btn.disabled = true;
+      try {
+        const d = await api("rema/complete", { body: { slot, pasted: $("#rema-paste", m).value } });
+        closeModal();
+        loadStores(d);
+        state.me = await api("state");
+        toast("Rema er koblet til. Første henting starter under Kvitteringer.", 5000);
+      } catch (e) {
+        $("#rema-err", m).hidden = false;
+        $("#rema-err", m).textContent = e.message;
+        btn.disabled = false;
+      }
+    };
+  });
 }
 
 // ---------------------------------------------------------------- Butikkvarsel

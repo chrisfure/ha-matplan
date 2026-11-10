@@ -27,8 +27,11 @@ configuration:
     name: Kassalapp – API-nøkkel
     description: Gratis nøkkel fra kassal.app/api. Brukes til å sammenligne priser mellom kjedene.
   trumf_cookie:
-    name: Trumf – cookie from a logged-in browser
+    name: Trumf account 1 – cookie from a logged-in browser
     description: Fetches receipts from Kiwi, Meny, Spar and Joker automatically. Log in at trumf.no on a computer, copy the full Cookie value from the browser's developer tools and paste it here (see Documentation). Read-only. Lasts about a year.
+  trumf_cookie_2:
+    name: Trumf account 2 – cookie from a logged-in browser
+    description: Optional. For a second Trumf account, for example the other adult in the household. Obtained the same way as account 1, logged in as the other person.
   trumf_since_days:
     name: Trumf – fetch receipts from the last number of days
     description: Trumf only shows the last 12 months.
