@@ -606,9 +606,11 @@ async function loadShop() {
   const el = $("#shop");
   el.innerHTML = `<div class="card empty"><span class="spinner"></span>Henter …</div>`;
   let d;
+  // hent handleliste og de andre listene samtidig
+  const inboxP = api("shopping/inbox").then((r) => r.lists.filter((l) => l.items.length || l.error)).catch(() => []);
   try { d = await api("shopping"); } catch (e) { el.innerHTML = `<div class="card job err">${esc(e.message)}</div>`; return; }
   state.shop = d;
-  try { d.inbox = (await api("shopping/inbox")).lists.filter((l) => l.items.length || l.error); } catch (_) { d.inbox = []; }
+  d.inbox = await inboxP;
   // valgt-tilstand: alle forslag som ikke står på lista er forhåndsvalgt
   state.shopSel = new Map();
   d.suggestions.forEach((s) => { if (!s.on_list && !s.bered_fill) state.shopSel.set(s.name, { cat: s.category, price: s.avg_price }); });

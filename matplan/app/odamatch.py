@@ -45,10 +45,11 @@ def refresh_history(force=False, progress=None):
     if progress:
         progress("Leser tidligere Oda-ordrer")
     hist = client.order_history()
-    db.ex("DELETE FROM oda_history")
-    for pid, e in hist.items():
-        db.ex("INSERT OR REPLACE INTO oda_history(product_id, name, times) VALUES(?,?,?)", (pid, e["name"], e["times"]))
-    db.set_setting("oda_history_at", time.time())
+    with db.tx():
+        db.ex("DELETE FROM oda_history")
+        for pid, e in hist.items():
+            db.ex("INSERT OR REPLACE INTO oda_history(product_id, name, times) VALUES(?,?,?)", (pid, e["name"], e["times"]))
+        db.set_setting("oda_history_at", time.time())
 
 
 def _history():

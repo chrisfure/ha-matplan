@@ -7,6 +7,7 @@ import subprocess
 import tempfile
 import threading
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, time, timedelta
 from statistics import median
 
@@ -72,21 +73,22 @@ def save_receipt(data, source, source_ref=None, uploaded_by=None, fallback_date=
         (store, d, tot),
     ):
         return None, "Allerede registrert (samme butikk, dato og sum)"
-    rid = db.ex(
-        "INSERT INTO receipts(store, purchased_on, total, source, source_ref, uploaded_by) "
-        "VALUES(?,?,?,?,?,?)",
-        (store, d, tot, source, ref, uploaded_by),
-    )
-    for it in items:
-        name = it["navn"].strip()
-        key = parse.norm_key(name)
-        m = db.one("SELECT product_id FROM name_map WHERE raw_key=?", (key,))
-        db.ex(
-            "INSERT INTO items(receipt_id, raw_name, raw_key, qty, unit, price, product_id) "
-            "VALUES(?,?,?,?,?,?,?)",
-            (rid, name, key, parse.amount(it.get("antall")) or 1, it.get("enhet") or "stk",
-             parse.amount(it.get("pris")), m["product_id"] if m else None),
+    with db.tx():  # hele kvitteringen lagres samlet
+        rid = db.ex(
+            "INSERT INTO receipts(store, purchased_on, total, source, source_ref, uploaded_by) "
+            "VALUES(?,?,?,?,?,?)",
+            (store, d, tot, source, ref, uploaded_by),
         )
+        for it in items:
+            name = it["navn"].strip()
+            key = parse.norm_key(name)
+            m = db.one("SELECT product_id FROM name_map WHERE raw_key=?", (key,))
+            db.ex(
+                "INSERT INTO items(receipt_id, raw_name, raw_key, qty, unit, price, product_id) "
+                "VALUES(?,?,?,?,?,?,?)",
+                (rid, name, key, parse.amount(it.get("antall")) or 1, it.get("enhet") or "stk",
+                 parse.amount(it.get("pris")), m["product_id"] if m else None),
+            )
     return rid, f"{store} {d}: {len(items)} varer"
 
 
@@ -112,25 +114,27 @@ def normalize_pending(progress=None):
             continue
         if isinstance(res, dict):
             res = res.get("varer") or res.get("items") or []
-        for r in res:
-            try:
-                b = batch[int(r.get("i"))]
-            except (TypeError, ValueError, IndexError):
-                continue
-            name = (r.get("n") or "").strip()
-            if not name:
-                pid = 0  # ikke en vare
-            else:
-                db.ex(
-                    "INSERT OR IGNORE INTO products(name, category, shelf_days, food) VALUES(?,?,?,?)",
-                    (name, r.get("k") or "Annet", int(r.get("h") or 30), 1 if r.get("m", 1) else 0),
-                )
-                pid = db.one("SELECT id FROM products WHERE name=?", (name,))["id"]
-                if name not in existing:
-                    existing.append(name)
-            db.ex("INSERT OR REPLACE INTO name_map(raw_key, product_id) VALUES(?,?)", (b["raw_key"], pid))
-            db.ex("UPDATE items SET product_id=? WHERE raw_key=? AND product_id IS NULL", (pid, b["raw_key"]))
-            done += 1
+        with db.tx():  # én lagring per bolk
+            for r in res:
+                try:
+                    b = batch[int(r.get("i"))]
+                    shelf = int(r.get("h") or 30)
+                except (TypeError, ValueError, IndexError, AttributeError):
+                    continue
+                name = (r.get("n") or "").strip()
+                if not name:
+                    pid = 0  # ikke en vare
+                else:
+                    db.ex(
+                        "INSERT OR IGNORE INTO products(name, category, shelf_days, food) VALUES(?,?,?,?)",
+                        (name, r.get("k") or "Annet", shelf, 1 if r.get("m", 1) else 0),
+                    )
+                    pid = db.one("SELECT id FROM products WHERE name=?", (name,))["id"]
+                    if name not in existing:
+                        existing.append(name)
+                db.ex("INSERT OR REPLACE INTO name_map(raw_key, product_id) VALUES(?,?)", (b["raw_key"], pid))
+                db.ex("UPDATE items SET product_id=? WHERE raw_key=? AND product_id IS NULL", (pid, b["raw_key"]))
+                done += 1
     return done
 
 
@@ -258,8 +262,26 @@ def _learn_factor(logs):
     return 1 + (med - 1) * weight, len(ratios)
 
 
+_stats_cache = {"key": None, "data": None}
+_stats_lock = threading.Lock()
+
+
 def product_stats():
-    """Kjøpshistorikk per produkt med anslått lager og når det trolig må kjøpes igjen."""
+    """Kjøpshistorikk per produkt med anslått lager og når det trolig må kjøpes igjen.
+
+    Beregningen går gjennom hele kjøpshistorikken, og flere sider trenger den flere ganger
+    per visning. Resultatet gjenbrukes derfor til noe er lagret i databasen eller datoen skifter."""
+    with _stats_lock:
+        key = (db.version, today())
+        if _stats_cache["key"] != key:
+            data = _product_stats()
+            # nøkkelen fra før beregningen: skrives noe underveis, regnes det på nytt neste gang
+            _stats_cache.update(key=key, data=data)
+        # kopier radene – de som kaller, legger på egne felter
+        return [dict(x) for x in _stats_cache["data"]]
+
+
+def _product_stats():
     rows = db.q(
         "SELECT i.product_id AS pid, r.purchased_on AS d, SUM(COALESCE(i.qty,1)) AS qty, "
         "SUM(COALESCE(i.price,0)) AS spent "
@@ -527,11 +549,11 @@ def shopping_suggestions():
     return sugg, regulars
 
 
-def set_pantry(product_id, status):
+def set_pantry(product_id, status, stats=None):
     if status in ("har", "tomt"):
         # husk rettelsen, så anslaget blir bedre neste gang
         try:
-            cur = next((p for p in product_stats() if p["id"] == product_id), None)
+            cur = next((p for p in (stats if stats is not None else product_stats()) if p["id"] == product_id), None)
             if cur and not cur.get("manual"):
                 db.ex("INSERT INTO pantry_log(product_id, status, at, since, base_life) VALUES(?,?,?,?,?)",
                       (product_id, status, now().isoformat(timespec="seconds"), cur["since"], cur["base_life"]))
@@ -549,11 +571,15 @@ def set_pantry(product_id, status):
 def mark_used(names):
     """Markerer varer som brukt opp (fra «Vi lagde denne»)."""
     n = 0
-    for name in names or []:
-        p = db.one("SELECT id FROM products WHERE name=?", (name,))
-        if p:
-            set_pantry(p["id"], "tomt")
-            n += 1
+    if not names:
+        return n
+    stats = product_stats()  # regnes én gang, ikke én gang per vare
+    with db.tx():
+        for name in names:
+            p = db.one("SELECT id FROM products WHERE name=?", (name,))
+            if p:
+                set_pantry(p["id"], "tomt", stats)
+                n += 1
     return n
 
 
@@ -563,7 +589,7 @@ def calendar_entities():
     try:
         return [
             {"entity_id": s["entity_id"], "name": s["attributes"].get("friendly_name", s["entity_id"])}
-            for s in ha.states() if s["entity_id"].startswith("calendar.")
+            for s in ha.states_cached() if s["entity_id"].startswith("calendar.")
         ]
     except Exception:
         return []
@@ -592,11 +618,22 @@ def calendar_by_day(days):
         cals = [c for c in cals if c["entity_id"] in chosen]
     by_day = defaultdict(list)
     errors = []
-    for c in cals:
+
+    def fetch(c):
         try:
-            evs = ha.calendar_events(c["entity_id"], start, end)
+            return ha.calendar_events(c["entity_id"], start, end), None
         except Exception as e:
-            errors.append(f"{c['name']}: {e}")
+            return [], e
+
+    # hent alle kalenderne samtidig i stedet for én og én
+    if cals:
+        with ThreadPoolExecutor(max_workers=min(8, len(cals))) as pool:
+            fetched = list(pool.map(fetch, cals))
+    else:
+        fetched = []
+    for c, (evs, err) in zip(cals, fetched):
+        if err is not None:
+            errors.append(f"{c['name']}: {err}")
             continue
         for ev in evs:
             s, allday = _parse_dt(ev.get("start"))
@@ -684,23 +721,28 @@ def sync_dinner_calendar(days_back=730):
         start_d = t - timedelta(days=days_back)
         events = _dinner_events(start_d, t + timedelta(days=21))
         # Kalenderen er fasit for perioden: erstatt tidligere import (vurderinger ligger per rett)
-        db.ex("DELETE FROM meals WHERE source='calendar' AND day>=?", (start_d.isoformat(),))
-        n = 0
-        for d, title in events.items():
-            if d >= t:
-                continue
-            for part in title.split(" / "):
-                if NOT_HOME.search(part):
+        with db.tx():  # alt i én lagring – og ingen ser en halvferdig historikk underveis
+            db.ex("DELETE FROM meals WHERE source='calendar' AND day>=?", (start_d.isoformat(),))
+            have = {(m["day"], m["title_key"]) for m in db.q(
+                "SELECT day, title_key FROM meals WHERE day>=?", (start_d.isoformat(),))}
+            n = 0
+            for d, title in events.items():
+                if d >= t:
                     continue
-                # Ikke dobbeltregistrer det som allerede er lagt inn via «Vi lagde denne»
-                if db.one("SELECT 1 FROM meals WHERE day=? AND title_key=?", (d.isoformat(), title_key(part))):
-                    continue
-                db.ex(
-                    "INSERT INTO meals(day, title, title_key, source) VALUES(?,?,?, 'calendar')",
-                    (d.isoformat(), part, title_key(part)),
-                )
-                n += 1
-        db.set_setting("calendar_sync", {"at": now().isoformat(timespec="minutes"), "meals": n, "entity": ent})
+                for part in title.split(" / "):
+                    if NOT_HOME.search(part):
+                        continue
+                    # Ikke dobbeltregistrer det som allerede er lagt inn via «Vi lagde denne»
+                    k = (d.isoformat(), title_key(part))
+                    if k in have:
+                        continue
+                    have.add(k)
+                    db.ex(
+                        "INSERT INTO meals(day, title, title_key, source) VALUES(?,?,?, 'calendar')",
+                        (k[0], part, k[1]),
+                    )
+                    n += 1
+            db.set_setting("calendar_sync", {"at": now().isoformat(timespec="minutes"), "meals": n, "entity": ent})
         return {d: tt for d, tt in events.items() if d >= t}
 
 
@@ -809,13 +851,16 @@ def _dinner_ctx(days, wish="", progress=None):
     if progress:
         progress("Leser middagskalenderen")
     planned, cal_note = {}, None
-    try:
-        planned = sync_dinner_calendar()
-    except Exception as e:
-        cal_note = f"Middagskalenderen: {e}"
-    if progress:
-        progress("Leser kalendere")
-    by_day, cal_errors = calendar_by_day(days)
+    # middagshistorikken (to år) hentes samtidig som de andre kalenderne leses
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        sync = pool.submit(sync_dinner_calendar)
+        if progress:
+            progress("Leser kalendere")
+        by_day, cal_errors = calendar_by_day(days)
+        try:
+            planned = sync.result()
+        except Exception as e:
+            cal_note = f"Middagskalenderen: {e}"
     if cal_note:
         cal_errors.append(cal_note)
     dinner_ent = dinner_calendar_entity()
@@ -977,6 +1022,17 @@ def replace_suggestion(dato, index, progress=None):
     dag["forslag"][index] = new
     db.set_setting("last_plan", plan)
     return plan
+
+
+def entity_name(entity_id):
+    """Visningsnavnet til en entitet i Home Assistant (entitets-ID hvis ukjent)."""
+    try:
+        for s in ha.states_cached():
+            if s["entity_id"] == entity_id:
+                return s["attributes"].get("friendly_name", entity_id)
+    except Exception:
+        pass
+    return entity_id
 
 
 def _cal_name(entity_id):

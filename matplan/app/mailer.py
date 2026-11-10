@@ -132,6 +132,7 @@ def _poll(progress):
         typ, data = M.search(None, "SINCE", crit)
         nums = data[0].split() if data and data[0] else []
         new = []
+        seen = {r["msgid"] for r in db.q("SELECT msgid FROM mail_seen")}  # ett oppslag, ikke ett per e-post
         # Hent Message-ID for alle i én runde
         for i in range(0, len(nums), 200):
             chunk = b",".join(nums[i:i + 200]).decode()
@@ -142,7 +143,7 @@ def _poll(progress):
                 num = part[0].split()[0]
                 m = re.search(rb"Message-ID:\s*(<[^>]+>|\S+)", part[1], re.I)
                 mid = (m.group(1) if m else b"num-" + num).decode("utf-8", "replace").strip()
-                if not db.one("SELECT 1 FROM mail_seen WHERE msgid=?", (mid,)):
+                if mid not in seen:
                     new.append((num, mid))
         handled, saved, failed = 0, 0, 0
         for idx, (num, mid) in enumerate(new):

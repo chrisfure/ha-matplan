@@ -3,11 +3,15 @@ import json
 import os
 import sqlite3
 import threading
+from contextlib import contextmanager
 
 from config import DATA_DIR
 
 _lock = threading.RLock()
 _conn = None
+_tx_depth = 0
+# Øker ved hver skriving – brukes til å vite når hurtiglagrede beregninger er utdaterte
+version = 0
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS receipts(
@@ -110,6 +114,8 @@ def conn():
         _conn.row_factory = sqlite3.Row
         _conn.execute("PRAGMA foreign_keys=ON")
         _conn.execute("PRAGMA journal_mode=WAL")
+        # Trygt sammen med WAL, og sparer en disk-synk per lagring (merkbart på SD-kort)
+        _conn.execute("PRAGMA synchronous=NORMAL")
         _conn.executescript(SCHEMA)
         _migrate(_conn)
         _conn.commit()
@@ -148,11 +154,36 @@ def one(sql, args=()):
 
 
 def ex(sql, args=()):
+    global version
     with _lock:
         c = conn()
         cur = c.execute(sql, args)
-        c.commit()
+        version += 1
+        if not _tx_depth:
+            c.commit()
         return cur.lastrowid
+
+
+@contextmanager
+def tx():
+    """Samler flere skrivinger i én transaksjon (én lagring til disk i stedet for én per linje).
+    Feiler noe underveis, rulles alt tilbake."""
+    global _tx_depth, version
+    with _lock:
+        c = conn()
+        _tx_depth += 1
+        try:
+            yield
+        except BaseException:
+            if _tx_depth == 1:
+                c.rollback()
+                version += 1
+            raise
+        else:
+            if _tx_depth == 1:
+                c.commit()
+        finally:
+            _tx_depth -= 1
 
 
 def get_setting(key):

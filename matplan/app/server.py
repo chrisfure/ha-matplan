@@ -1,5 +1,6 @@
 """HTTP-server for Matplan (kjører bak Home Assistant ingress)."""
 import base64
+import hashlib
 import json
 import logging
 import mimetypes
@@ -19,6 +20,7 @@ from config import DEV, INGRESS_IP, PORT
 
 log = logging.getLogger("matplan.http")
 STATIC = os.path.join(os.path.dirname(__file__), "static")
+_STATIC_CACHE = {}  # sti → ((endret, størrelse), innhold, etag)
 
 # --- Bakgrunnsjobber --------------------------------------------------------
 
@@ -91,7 +93,8 @@ def api_state(req, body):
 @route("GET", "/api/entities")
 def api_entities(req, body):
     try:
-        st = ha.states()
+        ha.forget_states()
+        st = ha.states_cached()
     except Exception as e:
         raise ApiError(str(e), 502)
 
@@ -116,6 +119,7 @@ def api_settings_save(req, body):
     for k, v in (body or {}).items():
         if k in allowed:
             db.set_setting(k, v)
+    ha.forget_states()  # nye kalendere/lister skal synes med en gang etter lagring
     return api_settings(req, None)
 
 
@@ -191,8 +195,9 @@ def api_receipt(req, body, rid):
 
 @route("DELETE", r"/api/receipts/(\d+)")
 def api_receipt_delete(req, body, rid):
-    db.ex("DELETE FROM items WHERE receipt_id=?", (rid,))
-    db.ex("DELETE FROM receipts WHERE id=?", (rid,))
+    with db.tx():
+        db.ex("DELETE FROM items WHERE receipt_id=?", (rid,))
+        db.ex("DELETE FROM receipts WHERE id=?", (rid,))
     return {"ok": True}
 
 
@@ -312,7 +317,7 @@ def api_shopping_inbox(req, body):
             continue
         try:
             items = ha.todo_items(ent)
-            name = next((s["attributes"].get("friendly_name", ent) for s in ha.states() if s["entity_id"] == ent), ent)
+            name = logic.entity_name(ent)
             out.append({"entity_id": ent, "name": name, "items": items})
         except Exception as e:
             out.append({"entity_id": ent, "name": ent, "items": [], "error": str(e)})
@@ -1044,12 +1049,14 @@ class Handler(BaseHTTPRequestHandler):
             or self.headers.get("X-Remote-User-Name"),
         }
 
-    def _send(self, code, payload, ctype="application/json; charset=utf-8"):
+    def _send(self, code, payload, ctype="application/json; charset=utf-8", headers=None):
         data = payload if isinstance(payload, bytes) else json.dumps(payload, ensure_ascii=False).encode()
+        headers = {"Cache-Control": "no-store", **(headers or {})}
         self.send_response(code)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(data)))
-        self.send_header("Cache-Control", "no-store")
+        for k, v in headers.items():
+            self.send_header(k, v)
         self.end_headers()
         self.wfile.write(data)
 
@@ -1061,8 +1068,22 @@ class Handler(BaseHTTPRequestHandler):
         ctype = mimetypes.guess_type(full)[0] or "application/octet-stream"
         if ctype.startswith("text/") or ctype.endswith("javascript"):
             ctype += "; charset=utf-8"
-        with open(full, "rb") as f:
-            self._send(200, f.read(), ctype)
+        # Nettleseren spør om filen er endret, og slipper å laste den ned på nytt når den ikke er det
+        st = os.stat(full)
+        hit = _STATIC_CACHE.get(full)
+        if not hit or hit[0] != (st.st_mtime_ns, st.st_size):
+            with open(full, "rb") as f:
+                data = f.read()
+            hit = ((st.st_mtime_ns, st.st_size), data, '"' + hashlib.sha256(data).hexdigest()[:20] + '"')
+            _STATIC_CACHE[full] = hit
+        _, data, etag = hit
+        if self.headers.get("If-None-Match") == etag:
+            self.send_response(304)
+            self.send_header("ETag", etag)
+            self.send_header("Cache-Control", "no-cache")
+            self.end_headers()
+            return
+        self._send(200, data, ctype, {"ETag": etag, "Cache-Control": "no-cache"})
 
     def _handle(self, method):
         if not self._allowed():

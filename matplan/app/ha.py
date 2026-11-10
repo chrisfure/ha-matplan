@@ -40,6 +40,23 @@ def states():
     return _req("GET", "/states") or []
 
 
+_states_cache = {"at": 0.0, "data": None}
+
+
+def states_cached(max_age=60):
+    """Entitetslisten endrer seg sjelden – gjenbruk den i opptil et minutt der vi bare trenger navn."""
+    import time
+    c = _states_cache
+    if c["data"] is None or time.monotonic() - c["at"] > max_age:
+        c["data"] = states()
+        c["at"] = time.monotonic()
+    return c["data"]
+
+
+def forget_states():
+    _states_cache["data"] = None
+
+
 def config():
     return _req("GET", "/config") or {}
 
