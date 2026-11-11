@@ -69,7 +69,7 @@ def save_receipt(data, source, source_ref=None, uploaded_by=None, fallback_date=
     # Samme butikk, dato og sum = trolig samme kvittering lastet opp to ganger
     tot = parse.amount(data.get("total"))
     if tot and db.one(
-        "SELECT id FROM receipts WHERE store=? AND purchased_on=? AND abs(total-?)<0.01",
+        "SELECT id FROM receipts WHERE store=? AND purchased_on=? AND abs(total-?)<0.01 AND source != 'bank'",
         (store, d, tot),
     ):
         return None, "Allerede registrert (samme butikk, dato og sum)"
@@ -79,6 +79,14 @@ def save_receipt(data, source, source_ref=None, uploaded_by=None, fallback_date=
             "VALUES(?,?,?,?,?,?)",
             (store, d, tot, source, ref, uploaded_by),
         )
+        if tot:
+            # Et bankkjøp uten kvittering (fra Pengeboka) med samme sum rundt samme dag er trolig denne.
+            # Fjernes nå, så det ikke telles dobbelt; Pengeboka legger det tilbake ved neste synk hvis ikke.
+            naer = db.one("SELECT id FROM receipts WHERE source = 'bank' AND abs(total - ?) < 0.01 "
+                         "AND abs(julianday(purchased_on) - julianday(?)) <= 3 "
+                         "ORDER BY abs(julianday(purchased_on) - julianday(?)) LIMIT 1", (tot, d, d))
+            if naer:
+                db.ex("DELETE FROM receipts WHERE id = ?", (naer["id"],))
         for it in items:
             name = it["navn"].strip()
             key = parse.norm_key(name)

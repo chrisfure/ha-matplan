@@ -113,7 +113,9 @@ Har dere også appen **Pengeboka**, kan den sjekke kvitteringene mot dagligvarek
 
 Etterpå står det **🏦 Felleskonto** (kontoen kjøpet ble betalt fra) på kvitteringer som er funnet i banken, og **Ikke i banken** på kvitteringer fra en periode banken dekker, men der Pengeboka ikke fant et kjøp med samme beløp. Pengeboka oppdaterer hver time og rett etter hver bankimport.
 
-Matplan får aldri se bankdataene, bare svaret per kvittering. Koden gir bare tilgang til å lese kvitteringene og melde tilbake bankstatus. Trykk **Lag ny kode** hvis dere vil stenge koblingen.
+**Kjøp uten kvittering** kommer også med: dagligvarekjøp som står i banken, men som Matplan ikke har kvittering for, vises i kvitteringslista med merket **Mangler kvittering** og kontoen det ble betalt fra. Velg **🏦 Mangler kvittering** i butikkfilteret for å se bare dem. De telles med i snittet per måned, per butikk, budsjettet og sensoren i Home Assistant, så tallene viser hva dere faktisk bruker på dagligvarer. Fordelingen på mat og annet regnes ut fra kvitteringene som har varelinjer. Når kvitteringen kommer inn – fra Trumf, Rema, e-post eller et bilde – forsvinner linjen av seg selv. Et kjøp regnes som dagligvarer når det har kategorien Dagligvarer i Pengeboka.
+
+Matplan får aldri se resten av bankdataene, bare dagligvarekjøpene og svaret per kvittering. Koden gir bare tilgang til å lese kvitteringene og melde tilbake bankstatus. Trykk **Lag ny kode** hvis dere vil stenge koblingen.
 
 ## Beredskapslager
 

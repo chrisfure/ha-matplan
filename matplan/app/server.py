@@ -159,7 +159,10 @@ def api_receipts(req, body):
     stores = {}
     for r in receipts:
         stores[r["store"]] = stores.get(r["store"], 0) + 1
-    if store:
+    bank_count = sum(1 for r in receipts if r["source"] == "bank")
+    if store == "__bank__":   # bare dagligvarekjøp fra banken som mangler kvittering
+        receipts = [r for r in receipts if r["source"] == "bank"]
+    elif store:
         receipts = [r for r in receipts if r["store"] == store]
     matched_total = 0.0
     if q:
@@ -198,6 +201,7 @@ def api_receipts(req, body):
         "count": len(receipts),
         "sum": round(sum(r["total"] or 0 for r in receipts), 2),
         "matched_sum": round(matched_total, 2),
+        "bank_count": bank_count,
         "stores": sorted(({"name": k, "count": v} for k, v in stores.items()), key=lambda x: -x["count"]),
     }
 
@@ -218,6 +222,10 @@ def api_receipt(req, body, rid):
 
 @route("DELETE", r"/api/receipts/(\d+)")
 def api_receipt_delete(req, body, rid):
+    r = db.one("SELECT source FROM receipts WHERE id=?", (rid,))
+    if r and r["source"] == "bank":
+        raise ApiError("Dette er et kjøp fra banken uten kvittering. Det forsvinner av seg selv når kvitteringen kommer inn, "
+                       "eller når kjøpet får en annen kategori enn Dagligvarer i Pengeboka.")
     with db.tx():
         db.ex("DELETE FROM items WHERE receipt_id=?", (rid,))
         db.ex("DELETE FROM receipts WHERE id=?", (rid,))

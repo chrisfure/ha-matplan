@@ -522,3 +522,5 @@ details.guests { margin-top: 10px; }
 .bankmerke.ok { background: rgba(47, 138, 102, .15); color: #217052; }
 @media (prefers-color-scheme: dark) { .bankmerke.ok { color: #8fdcb8; } }
 .bankmerke-linje.ok { font-weight: 700; }
+
+.bankmerke.uten { background: var(--warn-soft); color: var(--warn); margin-left: 0; }

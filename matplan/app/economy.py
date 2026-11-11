@@ -56,7 +56,7 @@ def compute(window=6):
     today = logic.today()
     cur = today.strftime("%Y-%m")
     receipts = db.q(
-        "SELECT id, store, purchased_on AS d, total FROM receipts "
+        "SELECT id, store, purchased_on AS d, total, source FROM receipts "
         "WHERE status='ok' AND source != 'manual' AND purchased_on IS NOT NULL ORDER BY purchased_on"
     )
     lines = db.q(
@@ -66,6 +66,13 @@ def compute(window=6):
     by_rec = defaultdict(list)
     for ln in lines:
         by_rec[ln["rid"]].append(ln)
+
+    # Kjøp fra banken uten kvittering (Pengeboka) har ingen varelinjer. De fordeles på mat og annet
+    # som snittet av kvitteringene som har varelinjer.
+    ekte = [(sum(x["price"] for x in by_rec[r["id"]] if _is_food(x) is True),
+             sum(x["price"] for x in by_rec[r["id"]] if _is_food(x) is False)) for r in receipts if by_rec.get(r["id"])]
+    ekte = [(f, o) for f, o in ekte if f + o > 0]
+    mat_andel = sum(f for f, _ in ekte) / sum(f + o for f, o in ekte) if ekte else 1.0
 
     months = defaultdict(lambda: {"total": 0.0, "food": 0.0, "other": 0.0, "count": 0, "stores": defaultdict(float)})
     cats = defaultdict(float)
@@ -80,6 +87,9 @@ def compute(window=6):
         rest = total - food - other
         if food + other > 0:
             food += rest * food / (food + other)
+            other = total - food
+        elif r["source"] == "bank":
+            food = total * mat_andel
             other = total - food
         else:
             food = total

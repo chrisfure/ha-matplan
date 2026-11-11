@@ -1123,7 +1123,9 @@ async function searchReceipts() {
   state.ecoSum = eco && !eco.empty ? eco : null;
   state.rcQuery = q;
   // butikkfilter
-  $("#rc-store").innerHTML = `<option value="">Alle butikker</option>` + d.stores.map((s) =>
+  $("#rc-store").innerHTML = `<option value="">Alle butikker</option>` +
+    (d.bank_count || state.rcStore === "__bank__" ? `<option value="__bank__" ${state.rcStore === "__bank__" ? "selected" : ""}>🏦 Mangler kvittering (${d.bank_count})</option>` : "") +
+    d.stores.map((s) =>
     `<option value="${esc(s.name)}" ${s.name === state.rcStore ? "selected" : ""}>${esc(s.name)} (${s.count})</option>`).join("");
   $("#rc-sort").value = state.rcSort;
 
@@ -1138,6 +1140,9 @@ async function searchReceipts() {
   const pl = (n) => `${n} kvittering${n === 1 ? "" : "er"}`;
   if (q) {
     sum.innerHTML = `<b>${d.count}</b> ${pl(d.count).replace(/^\d+ /, "")} inneholder «${esc(q)}»${d.matched_sum ? ` · ${nok(d.matched_sum)} brukt på treffene` : ""}`;
+  } else if (state.rcStore === "__bank__") {
+    const sumBank = d.receipts.reduce((t, r) => t + (r.total || 0), 0);
+    sum.innerHTML = `<b>${d.count}</b> dagligvarekjøp i banken uten kvittering · ${kr(sumBank)} · de telles med i snittet`;
   } else if (state.rcStore) {
     // snitt per måned for butikken, regnet av hele måneder
     const ms = {};
@@ -1149,11 +1154,13 @@ async function searchReceipts() {
     const c = e.current, mn = MONTHS[+c.month.slice(5) - 1].replace(/^./, (x) => x.toUpperCase());
     sum.innerHTML = `<div class="ecoline"><div>Snitt <b>${kr(e.avg_month)}/mnd</b> <span>siste ${e.basis_months} hele måned${e.basis_months === 1 ? "" : "er"}</span></div>
       <div><span>${mn} så langt ${kr(c.so_far)}${c.projection ? ` · ligger an til ca. ${kr(c.projection)}` : ""}${e.budget ? ` · budsjett ${kr(e.budget)}` : ""}</span>
-      <a href="#" data-go-eco>Se økonomi ›</a></div></div>`;
+      <a href="#" data-go-eco>Se økonomi ›</a></div>
+      ${d.bank_count ? `<div><span>Inkluderer ${d.bank_count} kjøp fra banken uten kvittering</span> <a href="#" data-go-bank>Vis ›</a></div>` : ""}</div>`;
   } else {
     sum.innerHTML = `<b>${d.count}</b> ${pl(d.count).replace(/^\d+ /, "")} · snittet per måned kommer når dere har kvitteringer for minst én hel måned`;
   }
   const goEco = $("[data-go-eco]", sum); if (goEco) goEco.onclick = (ev) => { ev.preventDefault(); showTab("okonomi"); };
+  const goBank = $("[data-go-bank]", sum); if (goBank) goBank.onclick = (ev) => { ev.preventDefault(); state.rcStore = "__bank__"; searchReceipts(); };
 
   // grupper etter måned (datosortering) eller butikk
   const groupKey = (r) => {
@@ -1183,7 +1190,9 @@ async function searchReceipts() {
     <div class="card list">${g.items.map((r) => `
       <div class="row click" data-rid="${r.id}">
         <div class="main"><div class="name">${esc(state.rcSort === "store" ? fmtDate(r.purchased_on) : r.store + " · " + fmtDate(r.purchased_on))}</div>
-        <div class="info">${r.items} varer${r.total ? " · " + nok(r.total) : ""} · ${r.source === "trumf" || r.source === "rema" ? "hentet fra " + esc(r.uploaded_by || r.source) : (r.source === "email" ? "e-post" : "opplastet") + (r.uploaded_by ? " av " + esc(r.uploaded_by) : "")}${bankMerke(r)}</div>
+        <div class="info">${r.source === "bank"
+          ? `${r.total ? nok(r.total) + " · " : ""}<span class="bankmerke uten">Mangler kvittering</span> 🏦 ${esc(r.uploaded_by || "banken")}`
+          : `${r.items} varer${r.total ? " · " + nok(r.total) : ""} · ${r.source === "trumf" || r.source === "rema" ? "hentet fra " + esc(r.uploaded_by || r.source) : (r.source === "email" ? "e-post" : "opplastet") + (r.uploaded_by ? " av " + esc(r.uploaded_by) : "")}${bankMerke(r)}`}</div>
         ${(r.hits || []).length ? `<div class="hits">${r.hits.slice(0, 4).map((h) =>
           `<span>${esc(h.name)}${h.qty && h.qty !== 1 ? " · " + esc(h.qty) + "×" : ""}${h.price != null ? " · " + nok(h.price) : ""}</span>`).join("")}${r.hits.length > 4 ? `<span>+ ${r.hits.length - 4} til</span>` : ""}</div>` : ""}
         </div>
@@ -1250,7 +1259,12 @@ $("#receipts").addEventListener("click", async (e) => {
   if (!r) return;
   const d = await api("receipts/" + r.dataset.rid);
   $$("#receipts [data-rid]").forEach((x) => x.classList.toggle("selected", x === r));
-  const html = `
+  const html = d.source === "bank" ? `
+    <h3>${esc(d.store)} · ${esc(fmtDate(d.purchased_on))}</h3>
+    <p class="hint">${d.total ? nok(d.total) + " · " : ""}betalt fra ${esc(d.uploaded_by || "banken")}</p>
+    <p class="hint bankmerke-linje">🏦 Kjøpet står i banken (Pengeboka), men Matplan har ingen kvittering med samme sum. Det telles med i snittet og budsjettet.
+      Kommer kvitteringen inn – fra Trumf, Rema, e-post eller et bilde – forsvinner denne linjen av seg selv.</p>
+    ${isWide() ? "" : `<div class="modal-acts"><button class="primary" id="m-close">Lukk</button></div>`}` : `
     <h3>${esc(d.store)} · ${esc(fmtDate(d.purchased_on))}</h3>
     <p class="hint">${d.items.length} varer${d.total ? " · " + nok(d.total) : ""}${d.uploaded_by ? " · " + esc(d.uploaded_by) : ""}</p>
     ${d.bank_status === "funnet" ? `<p class="hint bankmerke-linje ok">🏦 Betalt fra ${esc(d.bank_account || "banken")} ${esc(fmtDate(d.bank_date))}${d.bank_amount != null ? " · " + nok(d.bank_amount) : ""}</p>`
@@ -1261,7 +1275,7 @@ $("#receipts").addEventListener("click", async (e) => {
     <div class="modal-acts"><button class="ghost danger" id="m-del">Slett kvittering</button>${isWide() ? "" : `<button class="primary" id="m-close">Lukk</button>`}</div>`;
   const bind = (m, close) => {
     $("#m-close", m) && ($("#m-close", m).onclick = close);
-    $("#m-del", m).onclick = async () => {
+    if ($("#m-del", m)) $("#m-del", m).onclick = async () => {
       if (!$("#m-del", m).dataset.sure) { $("#m-del", m).dataset.sure = 1; $("#m-del", m).textContent = "Trykk igjen for å slette"; return; }
       await api("receipts/" + d.id, { method: "DELETE" });
       close();
