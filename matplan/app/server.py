@@ -14,6 +14,7 @@ from urllib.parse import parse_qs, unquote, urlparse
 
 import db
 import ha
+import kobling
 import logic
 import mailer
 import rema
@@ -110,6 +111,17 @@ def api_entities(req, body):
     return {"ai_task": pick("ai_task."), "todo": pick("todo."), "calendar": pick("calendar.")}
 
 
+@route("GET", "/api/kobling")
+def api_kobling(req, body):
+    return kobling.status()
+
+
+@route("POST", "/api/kobling/ny-kode")
+def api_kobling_ny(req, body):
+    kobling.ny_kode()
+    return kobling.status()
+
+
 @route("GET", "/api/settings")
 def api_settings(req, body):
     s = db.all_settings()
@@ -140,7 +152,8 @@ def api_receipts(req, body):
     store = (qs.get("store") or "").strip()
     sort = qs.get("sort") or "date_desc"
     receipts = db.q(
-        "SELECT r.*, COUNT(i.id) AS items FROM receipts r LEFT JOIN items i ON i.receipt_id=r.id "
+        "SELECT r.*, COUNT(i.id) AS items, b.status AS bank_status, b.bank_date, b.account AS bank_account "
+        "FROM receipts r LEFT JOIN items i ON i.receipt_id=r.id LEFT JOIN bank_links b ON b.receipt_id=r.id "
         "WHERE r.source != 'manual' GROUP BY r.id"
     )
     stores = {}
@@ -191,7 +204,8 @@ def api_receipts(req, body):
 
 @route("GET", r"/api/receipts/(\d+)")
 def api_receipt(req, body, rid):
-    r = db.one("SELECT * FROM receipts WHERE id=?", (rid,))
+    r = db.one("SELECT r.*, b.status AS bank_status, b.bank_date, b.account AS bank_account, b.amount AS bank_amount "
+               "FROM receipts r LEFT JOIN bank_links b ON b.receipt_id=r.id WHERE r.id=?", (rid,))
     if not r:
         raise ApiError("Fant ikke kvitteringen", 404)
     r["items"] = db.q(
@@ -1135,7 +1149,29 @@ class Handler(BaseHTTPRequestHandler):
             return
         self._send(200, data, ctype, {"ETag": etag, "Cache-Control": "no-cache"})
 
+    def _kobling(self, method):
+        """Pengeboka: egen, smal inngang med koblingskode – ikke via ingress."""
+        if not kobling.gyldig(self.headers.get("Authorization")):
+            return self._send(401, {"error": "Feil koblingskode"})
+        body = None
+        if method == "PUT":
+            n = int(self.headers.get("Content-Length") or 0)
+            if n > 5 * 1024 * 1024:
+                return self._send(413, {"error": "For stor forespørsel"})
+            try:
+                body = json.loads(self.rfile.read(n) or b"{}")
+            except json.JSONDecodeError:
+                return self._send(400, {"error": "Ugyldig JSON"})
+        try:
+            code, payload = kobling.handle(method, urlparse(self.path).path, self.query, body)
+        except Exception as e:
+            log.error("Feil i kobling %s %s: %s", method, self.path, e)
+            code, payload = 500, {"error": "Intern feil"}
+        return self._send(code, payload)
+
     def _handle(self, method):
+        if urlparse(self.path).path.startswith("/kobling/") and self.client_address[0] != INGRESS_IP:
+            return self._kobling(method)
         if not self._allowed():
             return self._send(403, {"error": "Kun tilgjengelig via Home Assistant"})
         path = unquote(urlparse(self.path).path)
@@ -1174,6 +1210,9 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         self._handle("GET")
+
+    def do_PUT(self):
+        self._handle("PUT")
 
     def do_POST(self):
         self._handle("POST")

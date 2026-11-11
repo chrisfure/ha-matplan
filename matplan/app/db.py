@@ -86,6 +86,14 @@ CREATE TABLE IF NOT EXISTS mail_seen(
   result TEXT,
   at TEXT DEFAULT (datetime('now'))
 );
+-- Fra Pengeboka: om kvitteringen er funnet blant bankens dagligvarekjøp
+CREATE TABLE IF NOT EXISTS bank_links(
+  receipt_id INTEGER PRIMARY KEY REFERENCES receipts(id) ON DELETE CASCADE,
+  status TEXT,          -- funnet | mangler
+  bank_date TEXT,
+  account TEXT,
+  amount REAL
+);
 """
 
 DEFAULT_SETTINGS = {

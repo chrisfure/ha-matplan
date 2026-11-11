@@ -516,3 +516,9 @@ details.guests { margin-top: 10px; }
 .gcount { display: flex; justify-content: space-between; align-items: center; padding: 4px 0; }
 .learned { margin: -2px 0 8px; }
 .inbox { margin-bottom: 12px; } .inbox .list { margin: 0 -14px 10px; }
+
+/* Bankstatus fra Pengeboka */
+.bankmerke { display: inline-block; padding: 1px 7px; border-radius: 99px; font-size: 12px; font-weight: 700; margin-left: 4px; background: var(--chip, rgba(127,127,127,.14)); white-space: nowrap; }
+.bankmerke.ok { background: rgba(47, 138, 102, .15); color: #217052; }
+@media (prefers-color-scheme: dark) { .bankmerke.ok { color: #8fdcb8; } }
+.bankmerke-linje.ok { font-weight: 700; }

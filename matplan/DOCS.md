@@ -104,6 +104,17 @@ Oda har ikke noe offisielt, åpent API. Matplan bruker de samme kallene som Oda-
 
 Alt regnes ut i appen uten AI. Tallene blir ikke bedre enn kvitteringene, så handler uten kvittering mangler.
 
+## Kvitteringer og banken (Pengeboka)
+
+Har dere også appen **Pengeboka**, kan den sjekke kvitteringene mot dagligvarekjøpene i banken:
+
+1. Gå til **Mer → Innstillinger → Pengeboka** og trykk **Kopier** på koblingskoden.
+2. I Pengeboka: **Innstillinger → Matplan**, lim inn koden og trykk **Koble til Matplan**.
+
+Etterpå står det **🏦 Felleskonto** (kontoen kjøpet ble betalt fra) på kvitteringer som er funnet i banken, og **Ikke i banken** på kvitteringer fra en periode banken dekker, men der Pengeboka ikke fant et kjøp med samme beløp. Pengeboka oppdaterer hver time og rett etter hver bankimport.
+
+Matplan får aldri se bankdataene, bare svaret per kvittering. Koden gir bare tilgang til å lese kvitteringene og melde tilbake bankstatus. Trykk **Lag ny kode** hvis dere vil stenge koblingen.
+
 ## Beredskapslager
 
 Trykk **Beredskap** øverst i fanen Lager (på PC i menyen). Lista følger rådene fra DSB om egenberedskap: å klare seg selv i **7 døgn** uten strøm, vann, internett og butikker. Mengdene regnes ut for husstanden (standard 2 voksne og 3 barn), og kan endres med **Endre**.

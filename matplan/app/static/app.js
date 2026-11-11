@@ -1183,12 +1183,19 @@ async function searchReceipts() {
     <div class="card list">${g.items.map((r) => `
       <div class="row click" data-rid="${r.id}">
         <div class="main"><div class="name">${esc(state.rcSort === "store" ? fmtDate(r.purchased_on) : r.store + " · " + fmtDate(r.purchased_on))}</div>
-        <div class="info">${r.items} varer${r.total ? " · " + nok(r.total) : ""} · ${r.source === "trumf" || r.source === "rema" ? "hentet fra " + esc(r.uploaded_by || r.source) : (r.source === "email" ? "e-post" : "opplastet") + (r.uploaded_by ? " av " + esc(r.uploaded_by) : "")}</div>
+        <div class="info">${r.items} varer${r.total ? " · " + nok(r.total) : ""} · ${r.source === "trumf" || r.source === "rema" ? "hentet fra " + esc(r.uploaded_by || r.source) : (r.source === "email" ? "e-post" : "opplastet") + (r.uploaded_by ? " av " + esc(r.uploaded_by) : "")}${bankMerke(r)}</div>
         ${(r.hits || []).length ? `<div class="hits">${r.hits.slice(0, 4).map((h) =>
           `<span>${esc(h.name)}${h.qty && h.qty !== 1 ? " · " + esc(h.qty) + "×" : ""}${h.price != null ? " · " + nok(h.price) : ""}</span>`).join("")}${r.hits.length > 4 ? `<span>+ ${r.hits.length - 4} til</span>` : ""}</div>` : ""}
         </div>
         <span>›</span>
       </div>`).join("")}</div>`).join("");
+}
+
+// Fra Pengeboka: er kvitteringen funnet blant dagligvarekjøpene i banken?
+function bankMerke(r) {
+  if (r.bank_status === "funnet") return ` <span class="bankmerke ok" title="Funnet i banken – betalt fra ${esc(r.bank_account || "")}">🏦 ${esc(r.bank_account || "I banken")}</span>`;
+  if (r.bank_status === "mangler") return ` <span class="bankmerke mangler" title="Pengeboka fant ikke et kjøp med samme beløp i banken">Ikke i banken</span>`;
+  return "";
 }
 
 let rcTimer;
@@ -1246,6 +1253,8 @@ $("#receipts").addEventListener("click", async (e) => {
   const html = `
     <h3>${esc(d.store)} · ${esc(fmtDate(d.purchased_on))}</h3>
     <p class="hint">${d.items.length} varer${d.total ? " · " + nok(d.total) : ""}${d.uploaded_by ? " · " + esc(d.uploaded_by) : ""}</p>
+    ${d.bank_status === "funnet" ? `<p class="hint bankmerke-linje ok">🏦 Betalt fra ${esc(d.bank_account || "banken")} ${esc(fmtDate(d.bank_date))}${d.bank_amount != null ? " · " + nok(d.bank_amount) : ""}</p>`
+      : d.bank_status === "mangler" ? `<p class="hint bankmerke-linje">Ikke funnet blant dagligvarekjøpene i banken (Pengeboka)</p>` : ""}
     <div class="list">${d.items.map((i) => `<div class="row ${isHit(i) ? "hit" : ""}"><div class="main"><div class="name">${esc(i.raw_name)}</div>
       <div class="info">${i.product_id === 0 ? "ikke en vare" : i.product ? "→ " + esc(i.product) + " · " + esc(i.category || "") : "venter på gjenkjenning"}</div></div>
       <div class="info">${i.qty && i.qty !== 1 ? esc(i.qty) + " × " : ""}${i.price != null ? esc(i.price.toFixed(2).replace(".", ",")) : ""}</div></div>`).join("")}</div>
@@ -1927,12 +1936,39 @@ async function loadStores(data) {
         <div class="row"><div class="main"><div class="name">Konto ${a.slot}</div>
           <div class="info">${a.configured ? "✅ Satt opp" : "Ikke satt opp"}</div>${note(a)}</div></div>`).join("")}</div>
       <p class="hint">Coop kan ikke hentes automatisk – Coop-appen er låst for andre programmer. Last opp skjermbilde eller videresend som før.</p>
-    </div>`;
+    </div>
+    <div class="card form" id="kobling-kort"></div>`;
+  loadKobling();
   $$("[data-rema-on]", el).forEach((b) => b.onclick = () => remaConnect(+b.dataset.remaOn));
   $$("[data-rema-off]", el).forEach((b) => b.onclick = async () => {
     if (!confirm(`Koble fra Rema-konto ${b.dataset.remaOff}? Kvitteringene som er hentet, blir liggende.`)) return;
     try { loadStores(await api("rema/disconnect", { body: { slot: +b.dataset.remaOff } })); state.me = await api("state"); } catch (e) { toast(e.message); }
   });
+}
+
+// ---------------------------------------------------------------- Kobling til Pengeboka
+async function loadKobling(data) {
+  const el = $("#kobling-kort");
+  if (!el) return;
+  let k = data;
+  if (!k) { try { k = await api("kobling"); } catch (e) { el.innerHTML = `<div class="job err">${esc(e.message)}</div>`; return; } }
+  const synk = k.synket ? new Date(k.synket).toLocaleString("nb-NO", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : null;
+  el.innerHTML = `
+    <h3 style="margin:0">🏦 Pengeboka</h3>
+    <p class="hint">Pengeboka kan koble kvitteringene mot dagligvarekjøpene i banken. Da ser du her hvilke kvitteringer som er funnet i banken, og i Pengeboka hvilke kjøp som har kvittering. Matplan får aldri se bankdataene.</p>
+    <label class="field">Koblingskode<small>Lim den inn i Pengeboka under Innstillinger → Matplan. Koden gir bare tilgang til å lese kvitteringene og melde tilbake om de er funnet i banken.</small></label>
+    <div style="display:flex;gap:8px"><input type="text" readonly value="${esc(k.kode)}" id="kobling-kode" style="font-family:ui-monospace,monospace">
+      <button class="small" id="kobling-kopier">Kopier</button></div>
+    <p class="hint">${synk ? `Sist oppdatert fra Pengeboka ${esc(synk)} · ${k.funnet} av ${k.vurdert} kvitteringer funnet i banken${k.dekket_til ? ` (banken er importert til ${esc(fmtDate(k.dekket_til))})` : ""}` : "Ikke koblet til ennå."}</p>
+    <button class="ghost small" id="kobling-ny">Lag ny kode</button>`;
+  $("#kobling-kopier", el).onclick = async () => {
+    const inp = $("#kobling-kode", el);
+    try { await navigator.clipboard.writeText(inp.value); toast("Koden er kopiert"); } catch (_) { inp.select(); document.execCommand("copy"); toast("Koden er kopiert"); }
+  };
+  $("#kobling-ny", el).onclick = async () => {
+    if (!confirm("Lage ny koblingskode? Pengeboka må få den nye koden før den kan hente kvitteringer igjen.")) return;
+    try { loadKobling(await api("kobling/ny-kode", { body: {} })); } catch (e) { toast(e.message); }
+  };
 }
 
 async function remaConnect(slot) {
