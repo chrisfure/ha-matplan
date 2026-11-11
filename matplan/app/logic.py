@@ -897,7 +897,7 @@ def _dinner_ctx(days, wish="", progress=None):
         "frequent": ", ".join(f"{d['title']} ({d['n']})" for d in dishes[:30] if d["n"] >= 2 and d["rating"] >= 0),
         "liked": ", ".join(d["title"] for d in dishes if d["rating"] > 0),
         "disliked": ", ".join(d["title"] for d in dishes if d["rating"] < 0),
-        "per_day": 3 if days <= 3 else 2,
+        "per_day": 1,
         "bered": _bered_prompt(),
     }
     return ctx, planned, day_events, cal_errors, dinner_ent

@@ -70,7 +70,13 @@ Svar KUN med en JSON-liste med ett element per vare:
     return ask_json(prompt, task_name="Matplan: normaliser varer")
 
 
-MENU_RULES = """Slik bygger du menyen:
+MENU_RULES = """Stil: vanlig, folkelig norsk middag – det de fleste norske barnefamilier faktisk lager til hverdags.
+- Velg kjente retter med kjente navn, f.eks. fiskekaker, fiskegrateng, laks med poteter, fiskeboller i hvit saus, kjøttkaker i brun saus, karbonader, kjøttboller i tomatsaus, pølser og potetmos, pasta med kjøttsaus, spaghetti bolognese, lapskaus, fårikål, kyllinggryte, ovnsbakt kylling med ris, tomatsuppe med egg, ertesuppe, pannekaker, omelett, taco, pizza, lasagne, hamburgere.
+- Få ingredienser: helst maks 6–7 varer utenom basisvarene (salt, pepper, olje, smør, mel, sukker, vanlige krydder). Enkle grønnsaker som tilbehør (gulrot, brokkoli, agurk, erter, salat) regnes med.
+- Unngå restaurantpregede eller eksotiske retter, sjeldne råvarer og lange ingredienslister (ikke korma, poke bowl, shakshuka, risotto o.l. med mindre familien har dem blant favorittene eller ønsker det).
+- "mangler" skal være kort – vanlige varer fra en norsk dagligvarebutikk.
+
+Slik bygger du menyen:
 - Hverdager (mandag–torsdag): enkel, rask og «kjedelig» hverdagsmat som barn spiser – f.eks. fiskekaker, fiskegrateng, kjøttkaker, kjøttboller, pasta med kjøttsaus, kyllinggryte, suppe, omelett, fiskepinner med grønnsaker. Helst maks 30 minutter.
 - Fredag og lørdag: typisk kosemat/helgemat – f.eks. taco, hjemmelaget pizza, hamburgere, grillmat, wok, lasagne.
 - Søndag: en litt finere søndagsmiddag med god tid – f.eks. ovnsbakt kylling, steik, gryte, fisk i ovn, kjøttkaker i brun saus med potetmos.
@@ -143,12 +149,12 @@ Slik bruker du kalenderen:
 
 Regler:
 - Dager som allerede er planlagt: returner KUN den planlagte retten som eneste forslag, med "planlagt": true, og fyll ut "type", "bruker" og "mangler" for den. Er planen «Middag borte» eller lignende, sett "hjemme": 0 og "forslag": [].
-- Andre dager: omtrent halvparten av forslagene bør være kjente favoritter fra listen over det vi spiser oftest (når de passer dagen). Resten kan være nye retter i samme stil.
+- Andre dager: omtrent halvparten av dagene i perioden bør få en kjent favoritt fra listen over det vi spiser oftest (når den passer dagen). Resten kan være andre vanlige norske middager i samme stil.
 - Se hele perioden under ett: varier typene, og sørg for fisk minst to ganger per uke når perioden er lang nok (regn med planlagte dager).
 - "tittel" skal være kort, som i familiens kalender (f.eks. «Taco», «Currylaks», «Kikertkorma», «Kyllinggryte»). Detaljer hører hjemme i "beskrivelse".
 - Bruk helst det vi har, spesielt varer merket *.
 - Salt, pepper, olje, smør, mel, sukker og vanlige krydder kan antas å finnes.
-- {n} forslag per dag, av ulik type.
+- Nøyaktig {n} forslag per dag ("forslag" er en liste med ett element). Velg det som passer dagen best – familien kan be om et nytt forslag hvis de vil ha noe annet.
 - "bruker": varenavn fra listen over det vi har. "mangler": konkrete varer som må kjøpes, med vanlige norske varenavn.
 - Dager med gjester: tell gjestene med i "hjemme" og "hvem" (f.eks. «alle + 2 gjester»), velg retter som passer mange og er lette å lage i større porsjoner (gjerne litt finere i helga, barnevennlig hvis det kommer barn), og ta høyde for større mengder i "mangler" (f.eks. «Kyllingfilet 1,2 kg»).
 {_bered_rules(ctx)}
@@ -187,6 +193,7 @@ Krav:
 - Næringsrik middag for barn i vekst: med grønnsaker (gjerne flere farger), fullkorn der det passer, lite salt og lite bearbeidet kjøtt.
 - Enkle, tydelige steg som en travel forelder kan følge. Norske mål (g, dl, ss, ts, stk).
 - Mengder tilpasset antall personer.
+- Få ingredienser: helst maks 6–7 varer utenom salt, pepper, olje, smør, mel, sukker og vanlige krydder. Ikke legg til ekstra råvarer for å gjøre retten «finere».
 - Maks 8 steg.
 
 Svar KUN med JSON, ingen forklaring:
