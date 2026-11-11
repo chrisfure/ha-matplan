@@ -166,7 +166,7 @@ Trykk **👥 Gjester** over «Lag middagsforslag», velg antall voksne og barn o
 - **Trykk på et forslag** for å se detaljene. Der kan du hente oppskrift, redigere (tittel, beskrivelse, type, det som mangler, ingredienser og fremgangsmåte), be om et nytt forslag, legge det som mangler på handlelista eller registrere at dere lagde det.
 - **🔄 Nytt forslag** bytter ut bare det ene forslaget.
 - **✏️ Egen middag** legger inn noe dere har lyst på selv, og du kan hente oppskrift på det også.
-- **Oppskrift i kalenderen:** Når du velger en middag, hentes oppskriften først, og den skrives inn i beskrivelsen på kalenderavtalen.
+- **Oppskrift i kalenderen:** «Velg» henter ikke oppskrift av seg selv. Vil du ha den med i kalenderavtalen, trykker du på retten og «📖 Hent oppskrift» før du velger. Har retten en oppskrift fra før, kommer den med automatisk.
 - **Oppskriftene huskes per rett.** Neste gang dere har taco, brukes samme oppskrift. Har du redigert den, brukes alltid din versjon. Trykk på en tidligere middag under «Middager vi har hatt» for å se eller lage oppskriften på den.
 
 Finner ikke appen kalenderen, må den være slått på i Google Calendar-integrasjonen i Home Assistant: Innstillinger → Enheter og tjenester → Google Calendar → entiteter → «Middag».
