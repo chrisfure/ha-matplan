@@ -186,6 +186,50 @@ def event_payload(it, entity):
     return data
 
 
+def already_in_calendar(it, entity):
+    """Finnes hendelsen allerede i kalenderen (lagt inn før, for hånd eller av en eldre versjon)?"""
+    first = date.fromisoformat(it["day"])
+    last = date.fromisoformat(it["end_day"]) if it.get("end_day") else first
+    try:
+        resp = ha.call_service("calendar", "get_events", {
+            "entity_id": entity,
+            "start_date_time": f"{first.isoformat()} 00:00:00",
+            "end_date_time": f"{(last + timedelta(days=1)).isoformat()} 00:00:00",
+        }, True)
+    except ha.HAError as e:
+        log.warning("Kunne ikke sjekke kalenderen %s: %s", entity, e)
+        return False
+    events = (resp.get(entity) or {}).get("events") or []
+    stengt = it["kind"] == "stengt"
+    return any(util.same_event(ev.get("summary") or "", it["title"],
+                               "stengt" if stengt and "🚫" in (ev.get("summary") or "") else None,
+                               it["kind"]) for ev in events)
+
+
+def dedupe_pending():
+    """Avviser forslag som venter, men som allerede finnes (samme dag, samme hendelse, samme barn)."""
+    n = 0
+    for it in items("pending"):
+        if it["kind"] == "fast":
+            continue
+        last = it.get("end_day") or it["day"]
+        others = db.q("SELECT id, title, kind, children FROM items WHERE id != ? AND kind != 'fast' "
+                      "AND status != 'rejected' AND day <= ? AND COALESCE(end_day, day) >= ? "
+                      "AND (status = 'approved' OR id < ?)", (it["id"], last, it["day"], it["id"]))
+        covered, first = set(), None
+        for r in others:
+            if util.same_event(r["title"], it["title"], r["kind"], it["kind"]):
+                covered |= set(json.loads(r["children"] or "[]"))
+                first = first or r
+        if first and set(it["children"]) <= covered:
+            reject(it["id"], by="auto", note=f"Dublett – «{first['title']}» finnes allerede")
+            n += 1
+    if n:
+        log.info("Fjernet %s dublett(er) blant forslagene", n)
+        push_sensors()
+    return n
+
+
 def approve(iid, by="user", note=None):
     it = db.one("SELECT * FROM items WHERE id=?", (iid,))
     if not it:
@@ -200,20 +244,29 @@ def approve(iid, by="user", note=None):
         cal_note = f"Fast påminnelse {util.weekdays_text(wds)}"
     else:
         s = db.all_settings()
-        done, missing, errors = [], [], []
+        done, existed, missing, errors = [], [], [], []
         for name in it["children"]:
             entity = calendar_for(name, s)
             if not entity:
                 missing.append(name)
+                continue
+            if already_in_calendar(it, entity):
+                existed.append(name)
                 continue
             try:
                 ha.call_service("calendar", "create_event", event_payload(it, entity))
                 done.append(name)
             except ha.HAError as e:
                 errors.append(f"{name}: {e}")
-        if errors or (missing and not done):
+        if errors or (missing and not done and not existed):
             raise RuntimeError("; ".join(errors) or f"Mangler kalender for {', '.join(missing)} (se Innstillinger)")
-        cal_note = f"Lagt i kalenderen til {', '.join(done)}"
+        parts = []
+        if done:
+            parts.append(f"Lagt i kalenderen til {', '.join(done)}")
+        if existed:
+            parts.append(f"fantes allerede hos {', '.join(existed)}")
+        cal_note = "; ".join(parts)
+        cal_note = cal_note[:1].upper() + cal_note[1:]
         if missing:
             cal_note += f" (mangler kalender for {', '.join(missing)})"
     db.ex("UPDATE items SET status='approved', decided_at=datetime('now'), calendar_note=?, decided_by=?, "

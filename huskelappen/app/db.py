@@ -103,6 +103,10 @@ def conn():
 
 
 def _migrate(c):
+    mcols = {r[1] for r in c.execute("PRAGMA table_info(mails)")}
+    for col in ("content_hash", "attach_hash"):
+        if col not in mcols:
+            c.execute(f"ALTER TABLE mails ADD COLUMN {col} TEXT")
     cols = {r[1] for r in c.execute("PRAGMA table_info(items)")}
     for col in ("weekdays", "source", "auto_note", "decided_by"):
         if col not in cols:

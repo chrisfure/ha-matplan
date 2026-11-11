@@ -81,7 +81,18 @@ def children_text(s):
     return "\n".join(lines)
 
 
-def build_prompt(s, subject, sender, received, body, pdfs, today=None, source_name=None):
+def known_lines(from_day, limit=40):
+    """Det som allerede er registrert fra en dato og framover – sendes med så Claude ikke gjentar det."""
+    rows = db.q("SELECT day, title, children, status, kind FROM items WHERE COALESCE(end_day, day) >= ? "
+                "AND kind != 'fast' ORDER BY day LIMIT ?", (from_day.isoformat(), limit))
+    out = [f"- {r['day']}: {r['title']} ({', '.join(json.loads(r['children'] or '[]'))})"
+           + (" – avvist av familien" if r["status"] == "rejected" else "") for r in rows]
+    for f in logic.fixed_list(True):
+        out.append(f"- fast {util.weekdays_text(f['weekdays'])}: {f['title']}")
+    return out
+
+
+def build_prompt(s, subject, sender, received, body, pdfs, today=None, source_name=None, known=None):
     today = today or util.today()
     names = [c["name"] for c in s.get("children") or []]
     where = source_name or s.get("kindergarten") or "barnehagen"
@@ -107,6 +118,10 @@ Ikke ta med:
 - vanlige faste aktiviteter (samling, utelek, grupper, yoga, klubb, måltider barnehagen serverer) når ingenting skal med
 - andre barns foreldresamtaler (bare samtaler der barnets navn passer med skrivemåten over)
 - tilbakeblikk på det som har skjedd, takk, hilsener og gratulasjoner
+- noe som allerede står i lista «Allerede registrert» under – heller ikke med annen ordlyd
+
+Samme hendelse samme dag skal være ETT punkt: f.eks. turdag + matpakke + oppmøtetid = ett punkt med det som
+skal med i «ha_med» og klokkeslett i tittelen. Lag aldri to punkter for samme dag og samme hendelse.
 
 Hvem det gjelder («gjelder»), bruk bare disse navnene: {json.dumps(names, ensure_ascii=False)}
 - noe for hele barnehagen/skolen, avdelingen eller klassen: alle barna der
@@ -125,6 +140,9 @@ Klokkeslett:
 Returner KUN JSON:
 {{"punkter":[{{"type":"ha_med|spesiell_dag|stengt|foreldre|frist|info|fast","dato":"YYYY-MM-DD","til_dato":null,"ukedager":null,"start":null,"slutt":null,"tittel":"kort, maks 40 tegn","ha_med":["..."],"detaljer":"én kort setning","gjelder":["navn"],"kilde":"kort sitat fra skrivet, maks 15 ord"}}]}}
 Finnes ingenting: {{"punkter":[]}}
+
+Allerede registrert (ikke ta med disse igjen):
+{chr(10).join(known or []) or "- ingenting"}
 
 E-post
 Fra: {sender}
@@ -171,7 +189,8 @@ def read_mail(subject, sender, received, body, attachments, s=None, source_name=
                 add_image(data, image_type(name, data))
         if not body.strip() and not pdfs and not images:
             return []
-        prompt = build_prompt(s, subject, sender, received, body, pdfs, source_name=source_name)
+        prompt = build_prompt(s, subject, sender, received, body, pdfs, source_name=source_name,
+                              known=known_lines(min(received, util.today())))
         data = run_ai(prompt, images)
     finally:
         for p in paths:
@@ -269,11 +288,25 @@ def save(items, msgid, subject, source=None):
                 r["kind"] == "fast" and r["status"] != "rejected" and _similar(r["title"], it["title"])
                 for r in db.q("SELECT kind, status, title FROM items WHERE kind='fast'")):
             continue
+        # Samme hendelse samme dag (også med annen ordlyd) → hopp over, eller legg bare til barn som mangler
+        last = it.get("end_day") or it["day"]
+        overlapping = db.q("SELECT id, title, kind, children, status FROM items WHERE kind != 'fast' "
+                           "AND day <= ? AND COALESCE(end_day, day) >= ?", (last, it["day"]))
+        matches = [r for r in overlapping if util.same_event(r["title"], it["title"], r["kind"], it["kind"])]
+        if matches:
+            covered = set()
+            for r in matches:
+                covered |= set(json.loads(r["children"] or "[]"))
+            missing = [k for k in it["children"] if k not in covered]
+            if not missing:
+                continue
+            pend = next((r for r in matches if r["status"] == "pending"), None)
+            if pend:  # utvid forslaget som venter i stedet for å lage et nytt
+                kids = json.loads(pend["children"] or "[]") + missing
+                db.ex("UPDATE items SET children=? WHERE id=?", (json.dumps(kids, ensure_ascii=False), pend["id"]))
+                continue
+            it = {**it, "children": missing}
         key = f"{it['day']}|{_norm(it['title'])}|{','.join(sorted(it['children']))}"
-        same_day = db.q("SELECT title, children FROM items WHERE day=?", (it["day"],))
-        if any(_similar(r["title"], it["title"]) and set(json.loads(r["children"])) & set(it["children"])
-               for r in same_day):
-            continue
         try:
             iid = db.ex(
                 "INSERT INTO items(msgid, day, end_day, start_time, end_time, title, bring, details, "

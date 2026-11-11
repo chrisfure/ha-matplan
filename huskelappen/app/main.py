@@ -28,6 +28,10 @@ def clock_loop():
 
 if __name__ == "__main__":
     db.conn()
+    try:
+        logic.dedupe_pending()  # rydder dubletter som kom inn før 0.2.1
+    except Exception as e:
+        logging.getLogger("huskelappen").warning("Dublettrydding feilet: %s", e)
     mailer.start_scheduler()
     actions.start()
     threading.Thread(target=clock_loop, daemon=True, name="clock").start()

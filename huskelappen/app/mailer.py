@@ -1,5 +1,6 @@
 """Henter e-post fra barnehage, skole og aktiviteter via IMAP (Gmail med app-passord) og lager forslag."""
 import email
+import hashlib
 import email.utils
 import imaplib
 import logging
@@ -124,6 +125,10 @@ def process(subject, sender, received, body, files, msgid, source=None):
             pending.append(it)
         else:
             auto[st] += 1
+    if new:
+        logic.dedupe_pending()
+        pending = [it for it in pending
+                   if (db.one("SELECT status FROM items WHERE id=?", (it["id"],)) or {}).get("status") == "pending"]
     if pending:
         logic.after_new_items(pending)
     if new:
@@ -134,6 +139,28 @@ def process(subject, sender, received, body, files, msgid, source=None):
     return res, new
 
 
+def _clean_subject(subject):
+    return re.sub(r"^\s*((re|sv|vs|fw|fwd|videresendt)\s*:\s*)+", "", subject or "", flags=re.I).strip()
+
+
+def fingerprints(subject, body, files):
+    """(innhold, vedlegg): like hvis barnehagen sender samme e-post flere ganger."""
+    att = sorted(hashlib.sha256(data).hexdigest() for _, data in files)
+    attach_hash = hashlib.sha256("|".join(att).encode()).hexdigest() if att else None
+    text = util.norm(_clean_subject(subject)) + "|" + util.norm(body)[:20000] + "|" + "|".join(att)
+    return hashlib.sha256(text.encode()).hexdigest(), attach_hash
+
+
+def seen_before(subject, content_hash, attach_hash):
+    if db.one("SELECT 1 FROM mails WHERE content_hash=?", (content_hash,)):
+        return True
+    if attach_hash:
+        for r in db.q("SELECT subject FROM mails WHERE attach_hash=?", (attach_hash,)):
+            if util.similar(_clean_subject(r["subject"]), _clean_subject(subject), 0.7):
+                return True
+    return False
+
+
 def handle_message(msg, msgid, source=None):
     subject = str(msg.get("Subject", ""))
     sender = str(msg.get("From", ""))
@@ -141,10 +168,14 @@ def handle_message(msg, msgid, source=None):
         received = email.utils.parsedate_to_datetime(msg.get("Date")).astimezone(util.tz()).date()
     except Exception:
         received = util.today()
-    res, _ = process(subject, sender, received, body_text(msg), attachments(msg), msgid,
-                     source or source_for(sender))
-    db.ex("INSERT OR REPLACE INTO mails(msgid, subject, sender, received, result) VALUES(?,?,?,?,?)",
-          (msgid, subject, sender, received.isoformat(), res))
+    body, files = body_text(msg), attachments(msg)
+    content_hash, attach_hash = fingerprints(subject, body, files)
+    if seen_before(subject, content_hash, attach_hash):
+        res = "Samme innhold som en tidligere e-post – hoppet over"
+    else:
+        res, _ = process(subject, sender, received, body, files, msgid, source or source_for(sender))
+    db.ex("INSERT OR REPLACE INTO mails(msgid, subject, sender, received, result, content_hash, attach_hash) "
+          "VALUES(?,?,?,?,?,?,?)", (msgid, subject, sender, received.isoformat(), res, content_hash, attach_hash))
     log.info("«%s»: %s", subject, res)
     return res
 

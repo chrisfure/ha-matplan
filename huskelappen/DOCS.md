@@ -61,6 +61,14 @@ E-postteksten, PDF-ene og bildene sendes til Claude gjennom Home Assistant sin A
 
 Ingenting legges i kalenderen før du har godkjent det, med mindre du slår på automatisk godkjenning.
 
+### Dubletter
+Barnehager sender ofte samme beskjed flere ganger: samme e-post to ganger, eller en påminnelse i neste ukebrev. Huskelappen stopper dette i tre ledd:
+- **E-post med samme innhold** (samme vedlegg og tekst, også «VS:»/«Re:») leses ikke på nytt.
+- **Samme hendelse samme dag**, også med annen ordlyd («Planleggingsdag – stengt» og «Planleggingsdagen»), blir ikke et nytt forslag. Gjelder den et barn som mangler, legges barnet til i stedet. Claude får også vite hva som allerede er registrert, og ber ikke om det igjen.
+- **Før noe legges i kalenderen** sjekkes det om hendelsen allerede finnes der. Da hoppes den over, og forslaget merkes «fantes allerede».
+
+Forslag som allerede er dubletter når appen oppdateres, avvises automatisk og merkes «Dublett». De kan angres.
+
 ## Sensorer
 - `sensor.huskelappen_barnehagen`: kort tekst som tilstand. Hele teksten ligger i egenskapen `tekst`, og antall forslag som venter ligger i `venter_godkjenning`.
 - `binary_sensor.huskelappen_vis`: `on` når teksten skal vises på skjermen.

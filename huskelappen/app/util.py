@@ -51,6 +51,49 @@ def similar(a, b, limit=0.8):
     return difflib.SequenceMatcher(None, norm(a), norm(b)).ratio() > limit
 
 
+# Ord som ikke sier noe om hvilken hendelse det er
+_GENERIC = {"barnehagen", "barnehage", "barna", "barn", "alle", "stengt", "stenger", "dagen", "denne",
+            "husk", "huske", "ha", "med", "til", "for", "kl", "og", "på", "i", "er", "det", "som", "om",
+            "fra", "være", "her", "senest", "skolen", "klassen", "avdelingen", "hele"}
+
+
+def _stem(w):
+    """Fjerner vanlige bøyningsendelser: «planleggingsdagen» → «planleggingsdag»."""
+    for end in ("ene", "ane", "en", "et", "er", "a"):
+        if w.endswith(end) and len(w) - len(end) >= 4:
+            return w[:-len(end)]
+    return w
+
+
+def sig_words(title):
+    """Ordene som sier hva hendelsen er (uten bøyning, så «planleggingsdagen» = «planleggingsdag»)."""
+    return {_stem(w) for w in norm(re.sub(r"\d", " ", title or "")).split()
+            if len(w) >= 4 and w not in _GENERIC}
+
+
+def strip_icon(s):
+    return re.sub(r"^[^\wæøåÆØÅ]+", "", s or "").strip()
+
+
+def same_event(a, b, kind_a=None, kind_b=None):
+    """Er to titler (samme dag) trolig samme hendelse, bare formulert ulikt?"""
+    a, b = strip_icon(a), strip_icon(b)
+    if similar(a, b, 0.85):
+        return True
+    if kind_a == "stengt" and kind_b == "stengt":
+        return True  # bare én stengt-dag per dag
+    if kind_a and kind_b and (kind_a == "ha_med") != (kind_b == "ha_med"):
+        return False  # «ha med matpakke» og selve hendelsen er to ulike påminnelser
+    wa, wb = sig_words(a), sig_words(b)
+    if not wa or not wb:
+        return False
+    common = wa & wb
+    if not common:
+        return False
+    small = wa if len(wa) <= len(wb) else wb
+    return common == small or len(common) / len(wa | wb) >= 0.5
+
+
 def weekdays_text(wds):
     """[1] → «tirsdager», [0,1,2,3,4] → «alle hverdager»."""
     wds = sorted(set(int(w) for w in wds or []))

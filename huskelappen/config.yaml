@@ -1,5 +1,5 @@
 name: Huskelappen
-version: "0.2.0"
+version: "0.2.1"
 slug: huskelappen
 description: Leser ukebrev og PDF-er fra barnehagen og minner om hva som skal med
 arch:
