@@ -114,6 +114,7 @@ def api_entities(req, body):
 def api_settings(req, body):
     s = db.all_settings()
     s.pop("last_plan", None)
+    s["portions_summary"] = logic.portions_summary()
     return s
 
 
@@ -121,6 +122,10 @@ def api_settings(req, body):
 def api_settings_save(req, body):
     allowed = set(db.DEFAULT_SETTINGS)
     for k, v in (body or {}).items():
+        if k == "eaters":
+            v = [{"kjonn": "m" if str(e.get("kjonn")) == "m" else "k", "aar": int(e["aar"])}
+                 for e in (v if isinstance(v, list) else [])[:20]
+                 if isinstance(e, dict) and str(e.get("aar", "")).isdigit() and 1900 <= int(e["aar"]) <= logic.today().year]
         if k in allowed:
             db.set_setting(k, v)
     ha.forget_states()  # nye kalendere/lister skal synes med en gang etter lagring

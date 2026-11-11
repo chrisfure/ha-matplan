@@ -104,6 +104,8 @@ Preferanser og allergier: {ctx['preferences'] or 'ingen oppgitt'}
 Ønske denne gangen: {ctx['wish'] or 'ingen'}
 Gjester: {_guest_line(ctx)}
 
+{ctx.get('portions') or ''}
+
 Kalender:
 {ctx['calendar']}
 
@@ -156,8 +158,8 @@ Regler:
 - Bruk helst det vi har, spesielt varer merket *.
 - Salt, pepper, olje, smør, mel, sukker og vanlige krydder kan antas å finnes.
 - Nøyaktig {n} forslag per dag ("forslag" er en liste med ett element). Velg det som passer dagen best – familien kan be om et nytt forslag hvis de vil ha noe annet.
-- "bruker": varenavn fra listen over det vi har. "mangler": konkrete varer som må kjøpes, med vanlige norske varenavn.
-- Dager med gjester: tell gjestene med i "hjemme" og "hvem" (f.eks. «alle + 2 gjester»), velg retter som passer mange og er lette å lage i større porsjoner (gjerne litt finere i helga, barnevennlig hvis det kommer barn), og ta høyde for større mengder i "mangler" (f.eks. «Kyllingfilet 1,2 kg»).
+- "bruker": varenavn fra listen over det vi har. "mangler": konkrete varer som må kjøpes, med vanlige norske varenavn. Kjøtt, kylling og fisk skal ha mengde beregnet etter porsjonsreglene over (f.eks. «Kyllinglårfilet 400 g»).
+- Dager med gjester: tell gjestene med i "hjemme" og "hvem" (f.eks. «alle + 2 gjester»), velg retter som passer mange og er lette å lage i større porsjoner (gjerne litt finere i helga, barnevennlig hvis det kommer barn), og legg gjestenes porsjoner til mengdene i "mangler".
 {_bered_rules(ctx)}
 Svar KUN med JSON, ingen forklaring:
 {{"dager":[{{"dato":"YYYY-MM-DD","hjemme":4,"hvem":"alle","tid":"kort|normal|god","begrunnelse":"kort setning, f.eks. «Turn 17–18:30, én voksen på jobbreise»","forslag":[{SUGGESTION_SHAPE}]}}]}}"""
@@ -176,24 +178,25 @@ Om dagen: {day_info or 'ingen spesielle hensyn'}
 Regler:
 - Ikke foreslå noen av disse (allerede vurdert): {", ".join(avoid) or 'ingen'}.
 - Bruk helst det vi har, spesielt varer merket *. Salt, pepper, olje, smør, mel og vanlige krydder finnes.
-- "tittel" kort, som i familiens kalender. "bruker": varenavn fra listen over det vi har. "mangler": konkrete varer som må kjøpes.
+- "tittel" kort, som i familiens kalender. "bruker": varenavn fra listen over det vi har. "mangler": konkrete varer som må kjøpes; kjøtt, kylling og fisk med mengde etter porsjonsreglene.
 
 Svar KUN med JSON for ett forslag, ingen forklaring:
 {SUGGESTION_SHAPE}"""
     return ask_json(prompt, task_name="Matplan: nytt forslag", dinner=True)
 
 
-def recipe(title, description, people, household, preferences, pantry):
+def recipe(title, description, people, household, preferences, pantry, portions=""):
     prompt = f"""Skriv en enkel, familievennlig oppskrift på norsk for middagen «{title}».
 Om retten: {description or 'ingen beskrivelse'}
-Antall som spiser: {people or 4} ({household or 'familie med to voksne og barn'})
+Antall som spiser: {people or 'hele husstanden'} ({household or 'familie med to voksne og barn'})
+{portions}
 Preferanser og allergier: {preferences or 'ingen oppgitt'}
 Dette har vi trolig hjemme, bruk gjerne det: {pantry or 'ukjent'}
 
 Krav:
 - Næringsrik middag for barn i vekst: med grønnsaker (gjerne flere farger), fullkorn der det passer, lite salt og lite bearbeidet kjøtt.
 - Enkle, tydelige steg som en travel forelder kan følge. Norske mål (g, dl, ss, ts, stk).
-- Mengder tilpasset antall personer.
+- Mengder etter porsjonsreglene over (voksenporsjoner, ikke antall personer). "porsjoner" er antall personer som spiser.
 - Få ingredienser: helst maks 6–7 varer utenom salt, pepper, olje, smør, mel, sukker og vanlige krydder. Ikke legg til ekstra råvarer for å gjøre retten «finere».
 - Maks 8 steg.
 

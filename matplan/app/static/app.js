@@ -1850,6 +1850,10 @@ async function loadSettings() {
     <label class="row" style="padding:10px 0 0"><input type="checkbox" id="s-imprm" ${s.import_remove !== false ? "checked" : ""}><div class="main">Fjern varene fra den andre lista når de er hentet</div></label>
     <label class="field">Husstanden<small>Hvem er dere, og hvilken kalender hører til hvem? Hjelper AI-en å forstå hvem som er hjemme.</small>
       <textarea id="s-house" placeholder="F.eks.: Kari og Ola (voksne), Emma og Jonas (barn). Kalenderen «Kari og Ola» er felles.">${esc(s.household)}</textarea></label>
+    <label class="field">Hvem spiser middag<small>Kjønn og fødselsår for hver som spiser. Brukes til å beregne mengder – barn spiser mindre enn voksne. Ingen navn trengs.</small></label>
+    <div class="list" id="s-eaters"></div>
+    <button type="button" class="small ghost" id="s-eat-add">+ Legg til person</button>
+    <p class="hint" id="s-eat-sum"></p>
     <label class="field">Preferanser og allergier<small>F.eks. «fisk to ganger i uka», «ingen nøtter», «barna liker ikke sterk mat».</small>
       <textarea id="s-pref">${esc(s.preferences)}</textarea></label>
     <label class="field">Vanlig middagstid<input type="time" id="s-time" value="${esc(s.dinner_time || "17:00")}"></label>
@@ -1859,6 +1863,22 @@ async function loadSettings() {
       <input type="number" id="s-hor" min="0" max="14" value="${esc(s.shop_horizon ?? 2)}"></label>
     <button class="primary wide" id="s-save">Lagre</button>
   `;
+  const year = new Date().getFullYear();
+  const eatRow = (e = {}) => `
+    <div class="row s-eat">
+      <select class="s-eat-k" aria-label="Kjønn" style="width:auto;margin:0"><option value="k" ${e.kjonn === "k" ? "selected" : ""}>Kvinne/jente</option><option value="m" ${e.kjonn === "m" ? "selected" : ""}>Mann/gutt</option></select>
+      <input type="number" class="s-eat-y" aria-label="Fødselsår" placeholder="Fødselsår" min="1900" max="${year}" value="${esc(e.aar ?? "")}" style="margin:0">
+      <button type="button" class="x" aria-label="Fjern person">✕</button>
+    </div>`;
+  const eatSum = (sum) => {
+    $("#s-eat-sum").textContent = sum
+      ? `Til sammen ca. ${String(sum.porsjoner).replace(".", ",")} voksenporsjoner – omtrent ${sum.gram} g kjøtt, kylling eller fisk når alle er hjemme.`
+      : "Ikke fylt ut: Claude anslår mengder ut fra husstanden over.";
+  };
+  $("#s-eaters").innerHTML = (s.eaters || []).map(eatRow).join("");
+  eatSum(s.portions_summary);
+  $("#s-eat-add").onclick = () => $("#s-eaters").insertAdjacentHTML("beforeend", eatRow());
+  $("#s-eaters").addEventListener("click", (e) => { const x = e.target.closest(".x"); if (x) x.closest(".s-eat").remove(); });
   const calSum = () => {
     const sel = $$(".s-cal:checked").map((c) => c.dataset.name);
     $("#s-cal-sum").textContent = sel.length ? `${sel.length} valgt: ${sel.join(", ")}` : "Alle kalendere";
@@ -1873,7 +1893,7 @@ async function loadSettings() {
   $("#s-imp-dd").addEventListener("change", impSum);
   $("#s-save").onclick = async () => {
     try {
-      await api("settings", { body: {
+      const saved = await api("settings", { body: {
         receipt_email: $("#s-mail").value.trim(),
         ai_entity: $("#s-ai").value, ai_entity_dinner: $("#s-ai-dinner").value, todo_entity: $("#s-todo").value,
         calendars: $$(".s-cal:checked").map((c) => c.value),
@@ -1881,7 +1901,10 @@ async function loadSettings() {
         dinner_time: $("#s-time").value, shop_horizon: +$("#s-hor").value,
         dinner_calendar: $("#s-dcal").value, write_calendar: $("#s-wcal").checked,
         import_lists: $$(".s-imp:checked").map((c) => c.value), import_remove: $("#s-imprm").checked,
+        eaters: $$(".s-eat").map((r) => ({ kjonn: $(".s-eat-k", r).value, aar: $(".s-eat-y", r).value.trim() }))
+          .filter((e) => /^\d{4}$/.test(e.aar)).map((e) => ({ kjonn: e.kjonn, aar: +e.aar })),
       } });
+      eatSum(saved.portions_summary);
       state.writeCal = $("#s-wcal").checked;
       state.me = await api("state");
       toast("Lagret");

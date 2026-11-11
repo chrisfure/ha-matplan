@@ -797,7 +797,7 @@ def get_recipe(title, description="", people=None, force=False):
     s = db.all_settings()
     stats = [p for p in product_stats() if p["food"] and p["in_stock"]]
     pantry = ", ".join(p["name"] for p in stats[:80])
-    rec = ai.recipe(title, description, people, s.get("household"), s.get("preferences"), pantry)
+    rec = ai.recipe(title, description, people, s.get("household"), s.get("preferences"), pantry, portions_text())
     if not isinstance(rec, dict):
         raise RuntimeError("Uventet svar fra AI")
     save_recipe(title, rec, edited=False)
@@ -898,6 +898,7 @@ def _dinner_ctx(days, wish="", progress=None):
         "liked": ", ".join(d["title"] for d in dishes if d["rating"] > 0),
         "disliked": ", ".join(d["title"] for d in dishes if d["rating"] < 0),
         "per_day": 1,
+        "portions": portions_text(),
         "bered": _bered_prompt(),
     }
     return ctx, planned, day_events, cal_errors, dinner_ent
@@ -927,6 +928,84 @@ def _attach_recipes(f):
     rec = cached_recipe(f.get("tittel", ""))
     if rec:
         f["oppskrift"] = rec
+
+
+# --- Porsjoner -----------------------------------------------------------------
+# Andel av en voksenporsjon etter alder og kjønn. Grovt anslag ut fra energibehov
+# (Helsedirektoratets kostråd): små barn spiser omtrent halvparten av en voksen.
+PROTEIN_PER_PORTION = 140   # gram rått kjøtt, kylling eller fisk uten bein per voksenporsjon
+
+
+def portion_share(kjonn, age):
+    m = kjonn == "m"
+    if age < 1:
+        return 0.0          # baby – spiser egen mat eller bare smaker
+    if age <= 2:
+        return 0.25
+    if age <= 5:
+        return 0.4
+    if age <= 8:
+        return 0.55
+    if age <= 11:
+        return 0.7
+    if age <= 14:
+        return 0.95 if m else 0.85
+    if age <= 17:
+        return 1.15 if m else 0.9
+    if age < 70:
+        return 1.1 if m else 0.9
+    return 0.9 if m else 0.75
+
+
+def eaters():
+    """Hvem som spiser middag, renset: [{"kjonn","aar","alder","andel"}]."""
+    out, year = [], today().year
+    for e in db.get_setting("eaters") or []:
+        try:
+            k = "m" if str(e.get("kjonn", "")).lower().startswith("m") else "k"
+            aar = int(e.get("aar"))
+        except (TypeError, ValueError, AttributeError):
+            continue
+        if not 1900 <= aar <= year:
+            continue
+        age = year - aar
+        out.append({"kjonn": k, "aar": aar, "alder": age, "andel": portion_share(k, age)})
+    return out
+
+
+def _fmt(x):
+    return f"{x:.2f}".rstrip("0").rstrip(".").replace(".", ",")
+
+
+def portions_summary():
+    """Kort oppsummering til innstillingene: antall voksenporsjoner og gram protein for alle."""
+    es = eaters()
+    if not es:
+        return None
+    total = sum(e["andel"] for e in es)
+    grams = int(round(total * PROTEIN_PER_PORTION / 50.0) * 50)
+    return {"personer": sum(1 for e in es if e["andel"]), "porsjoner": round(total, 2), "gram": grams}
+
+
+def portions_text():
+    """Til AI-en: hvem som spiser, hvor mye hver spiser, og regler for mengder."""
+    es = eaters()
+    if es:
+        who = "\n".join(
+            f"- {'Mann/gutt' if e['kjonn'] == 'm' else 'Kvinne/jente'}, {e['alder']} år: "
+            + ("spiser ikke vanlig middag (baby)" if not e["andel"] else f"{_fmt(e['andel'])} voksenporsjon")
+            for e in sorted(es, key=lambda e: e["aar"]))
+        s = portions_summary()
+        head = (f"Disse spiser middag ({s['personer']} personer, til sammen {_fmt(s['porsjoner'])} voksenporsjoner "
+                f"– ca. {s['gram']} g kjøtt, kylling eller fisk når alle er hjemme):\n{who}")
+    else:
+        head = ("Hvem som spiser er ikke registrert. Anta at barn under 6 år spiser under halv voksenporsjon "
+                "og barn 6–11 år omtrent 0,6 voksenporsjon.")
+    return head + f"""
+Mengder (viktig – familien synes mengdene ofte blir for store):
+- Regn i voksenporsjoner, ikke i antall personer. Er noen borte en dag, trekk fra deres andel. Gjest: voksen 1, barn 0,5.
+- Per voksenporsjon: ca. {PROTEIN_PER_PORTION} g rått kjøtt, kylling eller fisk uten bein (ca. 220 g med bein), 75 g ukokt pasta, 0,75 dl ukokt ris, 200 g poteter.
+- Rund av til en vanlig pakning når det er nær, men ikke mer enn ca. 15 % over det beregnede. Heller litt for lite enn for mye."""
 
 
 def _guests_clean(guests):
