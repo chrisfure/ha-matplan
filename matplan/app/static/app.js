@@ -297,16 +297,8 @@ function planRef(key) {
   return { plan, dag, dato, index: +idx, f: dag.forslag[+idx] };
 }
 
-async function ensureRecipe(r) {
-  if (r.f.oppskrift) return r.f.oppskrift;
-  const rec = await runJob(api("recipe", { body: { title: r.f.tittel, description: r.f.beskrivelse || "", dato: r.dato, index: r.index } }), $("#plan-job"));
-  r.f.oppskrift = rec;
-  return rec;
-}
-
 async function chooseFlow(r) {
   try {
-    if (state.writeCal && !r.f.valgt && !r.f.oppskrift) await ensureRecipe(r);
     const p = await api("dinner/choose", { body: { dato: r.dato, index: r.index } });
     renderPlan(p);
     if (p.melding) toast(p.melding, 4000);
@@ -1721,7 +1713,7 @@ function renderGuide() {
       <ol>
         <li>Velg <b>I dag / 3 dager / Uke</b> og trykk <b>Lag middagsforslag</b>. Skriv gjerne et ønske først.</li>
         <li><b>Trykk på et forslag</b> for oppskrift, hva vi har og hva som mangler.</li>
-        <li><b>📅 Velg</b> legger middagen med oppskrift inn i Middag-kalenderen.</li>
+        <li><b>📅 Velg</b> legger middagen inn i Middag-kalenderen. Vil du ha oppskrift, trykker du på retten og «📖 Hent oppskrift» – gjør du det før du velger, kommer oppskriften med i kalenderen.</li>
         <li>Liker du ikke et forslag: <b>🔄 Nytt forslag</b>. Lyst på noe annet: <b>✏️ Egen middag</b>.</li>
         <li><b>🛒 Kjøp det som mangler</b> legger ingrediensene på handlelista.</li>
       </ol>
