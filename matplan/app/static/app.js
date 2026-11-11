@@ -1207,32 +1207,33 @@ $("#rc-sort").addEventListener("change", (e) => { state.rcSort = e.target.value;
 function renderMailbox(st) {
   const m = st.mail || {};
   const pend = st.counts.pending ? `<p class="hint">${st.counts.pending} varenavn venter på gjenkjenning. <button class="small" id="btn-norm">Prøv nå</button></p>` : "";
-  $("#mailbox").innerHTML = m.enabled
-    ? `<button class="ghost wide" id="btn-mail">✉️ Hent kvitteringer fra e-post nå</button>
-       <p class="hint">${m.last_run ? `Sist hentet ${esc(m.last_run.replace("T", " kl. "))}: ${esc(m.error ? "feil – " + m.error : m.last_result || "")}` : "Hentes automatisk."}</p>${pend}`
-    : `<p class="hint">Tips: Slå på e-posthenting i app-innstillingene i Home Assistant, så kommer Oda-kvitteringer og videresendte kvitteringer inn automatisk.</p>${pend}`;
-  // Butikk-kontoer (Trumf, Rema): én knapp per kjede som er satt opp
-  [["trumf", "Trumf", "Trumf (Kiwi, Meny, Spar, Joker) hentes automatisk."],
-   ["rema", "Rema 1000", "Rema 1000 hentes automatisk."]].reverse().forEach(([key, name, idle]) => {
+  const when = (x) => esc(x.replace("T", " kl. "));
+  // Automatisk henting (e-post, Trumf, Rema) går av seg selv, så knappene ligger sammenfoldet
+  const src = [];
+  if (m.enabled) src.push({ key: "mail", label: "✉️ Hent fra e-post nå", st: m, idle: "Hentes automatisk." });
+  [["trumf", "Trumf", "Kiwi, Meny, Spar og Joker hentes automatisk."], ["rema", "Rema 1000", "Hentes automatisk."]].forEach(([key, name, idle]) => {
     const t = st[key] || {};
-    if (!t.enabled) return;
-    const last = [t.last_result, t.error ? "feil – " + t.error : ""].filter(Boolean).join("; ");
-    $("#mailbox").insertAdjacentHTML("afterbegin",
-      `<button class="ghost wide" id="btn-${key}">🧾 Hent kvitteringer fra ${name} nå</button>
-       <p class="hint">${t.last_run ? `Sist hentet ${esc(t.last_run.replace("T", " kl. "))}: ${esc(last)}` : idle}</p>`);
-    const tb = $("#btn-" + key);
-    tb.onclick = async () => {
-      tb.disabled = true;
-      try { toast(await runJob(api(key + "/poll", { body: {} }), $("#up-job")), 5000); } catch (_) {}
-      loadReceipts();
-    };
+    if (t.enabled) src.push({ key, label: `🧾 Hent fra ${name} nå`, st: t, idle });
   });
-  const b = $("#btn-mail");
-  if (b) b.onclick = async () => {
+  const errs = src.filter((x) => x.st.error).length;
+  const prev = $("#auto-dd");
+  const open = prev ? prev.open : false;
+  $("#mailbox").innerHTML = (src.length ? `
+    <details class="dropdown" id="auto-dd" ${open || errs ? "open" : ""}>
+      <summary>🔄 Automatisk henting${errs ? ` – <span class="danger">${errs === 1 ? "1 feil" : errs + " feil"}</span>` : ""}</summary>
+      <div class="dd-body" style="padding:10px 12px">${src.map((x) => {
+        const last = [x.st.last_result, x.st.error ? "feil – " + x.st.error : ""].filter(Boolean).join("; ");
+        return `<button class="ghost wide" data-poll="${x.key}">${x.label}</button>
+          <p class="hint">${x.st.last_run ? `Sist hentet ${when(x.st.last_run)}: ${esc(last)}` : x.idle}</p>`;
+      }).join("")}</div>
+    </details>`
+    : `<p class="hint">Tips: Slå på e-posthenting i app-innstillingene i Home Assistant, og koble til Rema og Trumf under Mer → Innstillinger, så kommer kvitteringene inn automatisk.</p>`) + pend;
+  $$("[data-poll]", $("#mailbox")).forEach((b) => b.onclick = async () => {
     b.disabled = true;
-    try { toast(await runJob(api("mail/poll", { body: {} }), $("#up-job")), 5000); loadReceipts(); } catch (_) {}
+    try { toast(await runJob(api(b.dataset.poll + "/poll", { body: {} }), $("#up-job")), 5000); } catch (_) {}
     b.disabled = false;
-  };
+    loadReceipts();
+  });
   const n = $("#btn-norm");
   if (n) n.onclick = async () => { try { toast(await runJob(api("normalize", { body: {} }), $("#up-job"))); loadReceipts(); } catch (_) {} };
 }
