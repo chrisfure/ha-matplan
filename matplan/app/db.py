@@ -89,7 +89,8 @@ CREATE TABLE IF NOT EXISTS mail_seen(
 """
 
 DEFAULT_SETTINGS = {
-    "ai_entity": "",            # tom = HA sin standard AI-oppgave-entitet
+    "ai_entity": "",            # tom = HA sin standard AI-oppgave-entitet (kvitteringer, varenavn)
+    "ai_entity_dinner": "",     # middagsforslag og oppskrifter; tom = samme som ai_entity
     "todo_entity": "",          # f.eks. todo.handleliste
     "calendars": [],            # tom = alle kalendere
     "household": "",

@@ -1828,7 +1828,9 @@ async function loadSettings() {
     list.map((x) => `<option value="${esc(x.entity_id)}" ${x.entity_id === val ? "selected" : ""}>${esc(x.name)} (${esc(x.entity_id)})</option>`).join("");
   const cals = s.calendars || [];
   el.innerHTML = `
-    <label class="field">AI-modell<small>AI-oppgave-entiteten i Home Assistant (f.eks. Claude). «Standard» bruker den som er valgt i HA.</small>
+    <label class="field">AI-modell for middag<small>Middagsforslag og oppskrifter. Her lønner det seg med en sterkere modell (f.eks. Sonnet) – den brukes bare noen ganger i uka.</small>
+      <select id="s-ai-dinner">${opt(ents.ai_task, s.ai_entity_dinner, "Samme som for kvitteringer")}</select></label>
+    <label class="field">AI-modell for kvitteringer og varer<small>Leser kvitteringsbilder og gjenkjenner varenavn. Brukes ofte, så en rask og billig modell (f.eks. Haiku) holder. «Standard» bruker den som er valgt i HA.</small>
       <select id="s-ai">${opt(ents.ai_task, s.ai_entity, "Standard")}</select></label>
     <label class="field">Handleliste<small>To-do-listen varer skal legges i.</small>
       <select id="s-todo">${opt(ents.todo, s.todo_entity, "– velg –")}</select></label>
@@ -1873,7 +1875,7 @@ async function loadSettings() {
     try {
       await api("settings", { body: {
         receipt_email: $("#s-mail").value.trim(),
-        ai_entity: $("#s-ai").value, todo_entity: $("#s-todo").value,
+        ai_entity: $("#s-ai").value, ai_entity_dinner: $("#s-ai-dinner").value, todo_entity: $("#s-todo").value,
         calendars: $$(".s-cal:checked").map((c) => c.value),
         household: $("#s-house").value, preferences: $("#s-pref").value,
         dinner_time: $("#s-time").value, shop_horizon: +$("#s-hor").value,

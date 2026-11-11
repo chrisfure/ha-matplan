@@ -12,8 +12,9 @@ CATEGORIES = [
 ]
 
 
-def ask_json(instructions, attachments=None, task_name="Matplan"):
-    entity = db.get_setting("ai_entity") or None
+def ask_json(instructions, attachments=None, task_name="Matplan", dinner=False):
+    """dinner=True: middagsforslag og oppskrifter, som kan bruke en egen (gjerne sterkere) modell."""
+    entity = (dinner and db.get_setting("ai_entity_dinner")) or db.get_setting("ai_entity") or None
     raw = ha.ai_task(instructions, entity_id=entity, attachments=attachments, task_name=task_name)
     return extract_json(raw)
 
@@ -160,7 +161,7 @@ Regler:
 {_bered_rules(ctx)}
 Svar KUN med JSON, ingen forklaring:
 {{"dager":[{{"dato":"YYYY-MM-DD","hjemme":4,"hvem":"alle","tid":"kort|normal|god","begrunnelse":"kort setning, f.eks. «Turn 17–18:30, én voksen på jobbreise»","forslag":[{SUGGESTION_SHAPE}]}}]}}"""
-    return ask_json(prompt, task_name="Matplan: middagsforslag")
+    return ask_json(prompt, task_name="Matplan: middagsforslag", dinner=True)
 
 
 def replace_one(ctx, dato, ukedag, avoid, day_info):
@@ -179,7 +180,7 @@ Regler:
 
 Svar KUN med JSON for ett forslag, ingen forklaring:
 {SUGGESTION_SHAPE}"""
-    return ask_json(prompt, task_name="Matplan: nytt forslag")
+    return ask_json(prompt, task_name="Matplan: nytt forslag", dinner=True)
 
 
 def recipe(title, description, people, household, preferences, pantry):
@@ -198,4 +199,4 @@ Krav:
 
 Svar KUN med JSON, ingen forklaring:
 {{"porsjoner":4,"tid":30,"ingredienser":["400 g laksefilet","3 dl fullkornsris"],"steg":["Sett ovnen på 200 °C.","…"],"tilbehor":"f.eks. agurk og gulrotstaver","tips":"kort tips, f.eks. hvordan få barna med eller lage dobbel porsjon til matpakke"}}"""
-    return ask_json(prompt, task_name="Matplan: oppskrift")
+    return ask_json(prompt, task_name="Matplan: oppskrift", dinner=True)

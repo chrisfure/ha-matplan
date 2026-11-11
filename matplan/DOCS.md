@@ -9,7 +9,7 @@ Appen dukker opp som **Matplan** i sidemenyen, og alle brukere i Home Assistant 
 1. Åpne Matplan og gå til **Mer → Innstillinger**. Under **Mer → Bruksanvisning** finner du en kort oversikt over hele appen.
 2. Velg **handleliste** (to-do-listen varer skal legges i) og **kalendere**.
 3. Skriv kort hvem som bor i huset og hvilken kalender som hører til hvem.
-4. La **AI-modell** stå på «Standard», eller velg Claude-entiteten.
+4. Velg AI-modeller. **AI-modell for middag** brukes til middagsforslag og oppskrifter, og der gir en sterkere modell (f.eks. Claude Sonnet) best forslag. **AI-modell for kvitteringer og varer** brukes mye oftere, og der holder en rask modell (f.eks. Claude Haiku). La feltene stå på standard hvis du bare har én.
 
 ## Kvitteringer
 
