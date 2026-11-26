@@ -94,6 +94,13 @@ CREATE TABLE IF NOT EXISTS bank_links(
   account TEXT,
   amount REAL
 );
+-- Koblet for hånd: denne kvitteringen er betalt med disse kjøpene i banken (Pengebokas id-er).
+-- Pengeboka bruker koblingen foran sin egen gjetting.
+CREATE TABLE IF NOT EXISTS bank_manual(
+  receipt_id INTEGER NOT NULL REFERENCES receipts(id) ON DELETE CASCADE,
+  bank_ref TEXT NOT NULL,
+  PRIMARY KEY (receipt_id, bank_ref)
+);
 """
 
 DEFAULT_SETTINGS = {

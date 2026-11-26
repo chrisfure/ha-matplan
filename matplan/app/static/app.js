@@ -1222,6 +1222,43 @@ async function searchReceipts() {
       </div>`).join("")}</div>`).join("");
 }
 
+// Koble en kvittering og kjøp i banken for hånd – når datoen eller beløpet er for ulikt til at
+// Pengeboka finner sammenhengen selv. For en kvittering kan flere kjøp velges (delt betaling).
+async function kobleBank(d, m, close) {
+  const box = $("#m-kobl", m);
+  const f = await api(`receipts/${d.id}/bank-forslag`);
+  const flere = f.type === "bank";
+  if (!f.forslag.length) {
+    box.innerHTML = `<p class="hint">${flere ? "Fant ingen dagligvarekjøp i banken uten kvittering innen to uker." : "Fant ingen kvitteringer innen to uker."}</p>`;
+    return;
+  }
+  const mål = d.total || 0;
+  box.innerHTML = `
+    <div class="cat">${flere ? "Velg kjøpet i banken – flere hvis betalingen er delt" : "Velg kvitteringen dette kjøpet hører til"}</div>
+    <div class="card list">${f.forslag.map((x) => `
+      <label class="row click"><input type="${flere ? "checkbox" : "radio"}" name="kobl" value="${x.id}">
+        <div class="main"><div class="name">${esc(x.butikk || "")} · ${esc(fmtDate(x.dato))}</div>
+        <div class="info">${nok(x.sum)}${x.konto ? " · " + esc(x.konto) : ""}${x.koblet ? " · allerede koblet" : ""}${Math.abs((x.sum || 0) - mål) < 0.01 ? " · <b>samme sum</b>" : ""}</div></div></label>`).join("")}</div>
+    <p class="hint" id="kobl-sum"></p>
+    <div class="modal-acts"><button class="primary" id="kobl-ok" disabled>Koble</button></div>`;
+  const valgt = () => $$("input[name=kobl]:checked", box);
+  box.onchange = () => {
+    const v = valgt();
+    $("#kobl-ok", box).disabled = !v.length;
+    if (flere && v.length > 1) {
+      const sum = v.reduce((t, i) => t + (f.forslag.find((x) => String(x.id) === i.value).sum || 0), 0);
+      $("#kobl-sum", box).textContent = `Til sammen ${nok(sum)} – kvitteringen er ${nok(mål)}`;
+    } else $("#kobl-sum", box).textContent = "";
+  };
+  $("#kobl-ok", box).onclick = async () => {
+    await api(`receipts/${d.id}/bank-kobling`, { body: { ids: valgt().map((i) => Number(i.value)) } });
+    toast("Koblet. Pengeboka bruker koblingen fra nå av.");
+    close();
+    loadReceipts();
+  };
+  box.scrollIntoView({ block: "nearest", behavior: "smooth" });
+}
+
 // Fra Pengeboka: er kvitteringen funnet blant dagligvarekjøpene i banken?
 function bankMerke(r) {
   if (r.bank_status === "funnet") return ` <span class="bankmerke ok" title="Funnet i banken – betalt fra ${esc(r.bank_account || "")}">🏦 ${esc(r.bank_account || "I banken")}</span>`;
@@ -1286,17 +1323,28 @@ $("#receipts").addEventListener("click", async (e) => {
     <p class="hint">${d.total ? nok(d.total) + " · " : ""}betalt fra ${esc(d.uploaded_by || "banken")}</p>
     <p class="hint bankmerke-linje">🏦 Kjøpet står i banken (Pengeboka), men Matplan har ingen kvittering med samme sum. Det telles med i snittet og budsjettet.
       Kommer kvitteringen inn – fra Trumf, Rema, e-post eller et bilde – forsvinner denne linjen av seg selv.</p>
-    ${isWide() ? "" : `<div class="modal-acts"><button class="primary" id="m-close">Lukk</button></div>`}` : `
+    <div id="m-kobl"></div>
+    <div class="modal-acts"><button class="ghost" id="m-bank">🔗 Har kvittering – koble til</button>${isWide() ? "" : `<button class="primary" id="m-close">Lukk</button>`}</div>` : `
     <h3>${esc(d.store)} · ${esc(fmtDate(d.purchased_on))}</h3>
     <p class="hint">${d.items.length} varer${d.total ? " · " + nok(d.total) : ""}${d.uploaded_by ? " · " + esc(d.uploaded_by) : ""}</p>
-    ${d.bank_status === "funnet" ? `<p class="hint bankmerke-linje ok">🏦 Betalt fra ${esc(d.bank_account || "banken")} ${esc(fmtDate(d.bank_date))}${d.bank_amount != null ? " · " + nok(d.bank_amount) : ""}</p>`
+    ${d.bank_status === "funnet" ? `<p class="hint bankmerke-linje ok">🏦 Betalt fra ${esc(d.bank_account || "banken")} ${esc(fmtDate(d.bank_date))}${d.bank_amount != null ? " · " + nok(d.bank_amount) : ""}${d.bank_manuell ? " · koblet for hånd" : ""}</p>`
       : d.bank_status === "mangler" ? `<p class="hint bankmerke-linje">Ikke funnet blant dagligvarekjøpene i banken (Pengeboka)</p>` : ""}
+    <div id="m-kobl"></div>
     <div class="list">${d.items.map((i) => `<div class="row ${isHit(i) ? "hit" : ""}"><div class="main"><div class="name">${esc(i.raw_name)}</div>
       <div class="info">${i.product_id === 0 ? "ikke en vare" : i.product ? "→ " + esc(i.product) + " · " + esc(i.category || "") : "venter på gjenkjenning"}</div></div>
       <div class="info">${i.qty && i.qty !== 1 ? esc(i.qty) + " × " : ""}${i.price != null ? esc(i.price.toFixed(2).replace(".", ",")) : ""}</div></div>`).join("")}</div>
-    <div class="modal-acts"><button class="ghost danger" id="m-del">Slett kvittering</button>${isWide() ? "" : `<button class="primary" id="m-close">Lukk</button>`}</div>`;
+    <div class="modal-acts"><button class="ghost danger" id="m-del">Slett kvittering</button>${d.bank_manuell
+      ? `<button class="ghost" id="m-bank-av">Fjern kobling</button>`
+      : `<button class="ghost" id="m-bank">🔗 ${d.bank_status === "funnet" ? "Feil kjøp? Koble på nytt" : "Koble til bankkjøp"}</button>`}${isWide() ? "" : `<button class="primary" id="m-close">Lukk</button>`}</div>`;
   const bind = (m, close) => {
     $("#m-close", m) && ($("#m-close", m).onclick = close);
+    if ($("#m-bank", m)) $("#m-bank", m).onclick = () => kobleBank(d, m, close).catch((e) => toast(e.message));
+    if ($("#m-bank-av", m)) $("#m-bank-av", m).onclick = async () => {
+      await api(`receipts/${d.id}/bank-kobling`, { method: "DELETE" });
+      toast("Koblingen er fjernet. Pengeboka prøver selv igjen ved neste synk.");
+      close();
+      loadReceipts();
+    };
     if ($("#m-del", m)) $("#m-del", m).onclick = async () => {
       if (!$("#m-del", m).dataset.sure) { $("#m-del", m).dataset.sure = 1; $("#m-del", m).textContent = "Trykk igjen for å slette"; return; }
       await api("receipts/" + d.id, { method: "DELETE" });

@@ -14,6 +14,9 @@ Ingenting annet i Matplan kan nås med koden.
 Kjøp uten kvittering lagres som egne rader i receipts med source='bank' (uten varelinjer).
 Da kommer de med i snitt, butikker og budsjett, og forsvinner av seg selv når kvitteringen
 kommer inn og Pengeboka finner den.
+
+Finner ikke Pengeboka sammenhengen selv, kan kvitteringen kobles for hånd til ett eller flere
+bankkjøp (bank_manual). Koblingen sendes med kvitteringsoversikten, og Pengeboka bruker den først.
 """
 import hmac
 import re
@@ -81,6 +84,11 @@ def handle(method: str, path: str, query: dict, body) -> tuple[int, dict]:
             "FROM receipts r LEFT JOIN items i ON i.receipt_id = r.id "
             "WHERE r.source NOT IN ('manual', 'bank') AND r.purchased_on >= ? GROUP BY r.id ORDER BY r.purchased_on",
             (fra,))
+        manuell = {}
+        for m in db.q("SELECT receipt_id, bank_ref FROM bank_manual"):
+            manuell.setdefault(m["receipt_id"], []).append(m["bank_ref"])
+        for r in rader:
+            r["bank_manuell"] = manuell.get(r["id"], [])
         return 200, {"kvitteringer": rader}
     m = re.fullmatch(r"/kobling/kvitteringer/(\d+)", path)
     if method == "GET" and m:
@@ -133,6 +141,13 @@ def handle(method: str, path: str, query: dict, body) -> tuple[int, dict]:
                 for ref, rid in gamle.items():
                     if ref not in set(refs):
                         db.ex("DELETE FROM receipts WHERE id = ?", (rid,))
+            # Koblet for hånd mot et kjøp som ikke finnes i Pengeboka lenger (slettet der) – rydd bort
+            if kjop is not None and rader:
+                kjente = {str(k["ref"]) for k in body.get("uten_kvittering") or [] if isinstance(k, dict)}
+                funnet = {r[0] for r in rader if r[1] == "funnet"}
+                for m in db.q("SELECT receipt_id, bank_ref FROM bank_manual"):
+                    if m["receipt_id"] not in funnet and m["bank_ref"] not in kjente:
+                        db.ex("DELETE FROM bank_manual WHERE receipt_id = ? AND bank_ref = ?", (m["receipt_id"], m["bank_ref"]))
         db.set_setting("bank_link_info", {
             "synket": datetime.now(timezone.utc).isoformat(timespec="seconds"),
             "dekket_til": dekket if re.fullmatch(r"\d{4}-\d{2}-\d{2}", dekket) else None,

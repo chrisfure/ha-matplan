@@ -112,7 +112,7 @@ details.events ul { margin: 4px 0; padding-left: 18px; }
 .row .main { flex: 1; min-width: 0; }
 .row .name { font-weight: 550; overflow: hidden; text-overflow: ellipsis; }
 .row .info { color: var(--muted); font-size: 13px; }
-.row input[type=checkbox] { width: 22px; height: 22px; accent-color: var(--accent); flex: none; }
+.row input[type=checkbox], .row input[type=radio] { width: 22px; height: 22px; accent-color: var(--accent); flex: none; }
 .row.click { cursor: pointer; }
 .cat { font-size: 13px; color: var(--muted); font-weight: 600; margin: 18px 4px 4px; }
 .pill2 { display: flex; gap: 4px; }

@@ -9,6 +9,7 @@ import re
 import threading
 import traceback
 import uuid
+from datetime import date
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, unquote, urlparse
 
@@ -217,6 +218,7 @@ def api_receipt(req, body, rid):
         "LEFT JOIN products p ON p.id=i.product_id WHERE receipt_id=? ORDER BY i.id",
         (rid,),
     )
+    r["bank_manuell"] = bool(db.one("SELECT 1 AS x FROM bank_manual WHERE receipt_id=?", (rid,)))
     return r
 
 
@@ -229,6 +231,74 @@ def api_receipt_delete(req, body, rid):
     with db.tx():
         db.ex("DELETE FROM items WHERE receipt_id=?", (rid,))
         db.ex("DELETE FROM receipts WHERE id=?", (rid,))
+    return {"ok": True}
+
+
+# ---------------------------------------------------------------- koble kvittering og bankkjøp for hånd
+# Når Pengeboka ikke finner sammenhengen selv (annen dato, delt betaling, avrundet beløp …).
+def _bankrad(r):
+    return {"id": r["id"], "butikk": r["store"], "dato": r["purchased_on"], "sum": r["total"], "konto": r["uploaded_by"]}
+
+
+@route("GET", r"/api/receipts/(\d+)/bank-forslag")
+def api_bank_forslag(req, body, rid):
+    """Det som kan høre sammen med denne: bankkjøp for en kvittering, eller kvitteringer for et bankkjøp."""
+    r = db.one("SELECT * FROM receipts WHERE id=?", (rid,))
+    if not r or r["source"] == "manual":
+        raise ApiError("Fant ikke kvitteringen", 404)
+    dag = r["purchased_on"] or ""
+    if r["source"] == "bank":
+        andre = db.q("SELECT r.*, b.status AS bank_status FROM receipts r LEFT JOIN bank_links b ON b.receipt_id=r.id "
+                     "WHERE r.source NOT IN ('manual', 'bank') AND r.purchased_on BETWEEN date(?, '-14 days') AND date(?, '+14 days')",
+                     (dag, dag))
+    else:
+        andre = db.q("SELECT * FROM receipts WHERE source = 'bank' AND purchased_on BETWEEN date(?, '-14 days') AND date(?, '+14 days')",
+                     (dag, dag))
+    tot = r["total"] or 0
+
+    def avstand(x):
+        try:
+            dager = abs((date.fromisoformat(x["purchased_on"][:10]) - date.fromisoformat(dag[:10])).days)
+        except (TypeError, ValueError):
+            dager = 99
+        return (x.get("bank_status") == "funnet", round(abs((x["total"] or 0) - tot) / max(tot, 1), 2), dager)
+    andre.sort(key=avstand)
+    return {"type": "kvitteringer" if r["source"] == "bank" else "bank",
+            "forslag": [{**_bankrad(x), "koblet": x.get("bank_status") == "funnet"} for x in andre[:12]]}
+
+
+@route("POST", r"/api/receipts/(\d+)/bank-kobling")
+def api_bank_kobling(req, body, rid):
+    """{"ids": [...]} – bankkjøp for en kvittering, eller kvitteringen for et bankkjøp."""
+    r = db.one("SELECT * FROM receipts WHERE id=?", (rid,))
+    ids = [int(x) for x in (body or {}).get("ids") or [] if str(x).isdigit()][:6]
+    if not r or not ids:
+        raise ApiError("Velg hva som hører sammen")
+    if r["source"] == "bank":
+        kv, bank = db.one("SELECT * FROM receipts WHERE id=? AND source NOT IN ('manual', 'bank')", (ids[0],)), [r]
+    else:
+        kv = r
+        bank = [x for x in (db.one("SELECT * FROM receipts WHERE id=? AND source='bank'", (i,)) for i in ids) if x]
+    if not kv or not bank or kv["source"] in ("manual", "bank"):
+        raise ApiError("Fant ikke kvitteringen eller kjøpet")
+    bank.sort(key=lambda x: x["purchased_on"] or "")
+    with db.tx():
+        db.ex("DELETE FROM bank_manual WHERE receipt_id=?", (kv["id"],))
+        for b in bank:
+            db.ex("INSERT OR IGNORE INTO bank_manual(receipt_id, bank_ref) VALUES(?, ?)",
+                  (kv["id"], (b["source_ref"] or "").removeprefix("bank:")))
+            db.ex("DELETE FROM receipts WHERE id=?", (b["id"],))   # kjøpet er nå dekket av kvitteringen
+        # Vis koblingen med en gang – Pengeboka bekrefter den ved neste synk
+        db.ex("INSERT OR REPLACE INTO bank_links(receipt_id, status, bank_date, account, amount) VALUES(?, 'funnet', ?, ?, ?)",
+              (kv["id"], bank[0]["purchased_on"], bank[0]["uploaded_by"], round(sum(b["total"] or 0 for b in bank), 2)))
+    return {"ok": True, "kvittering": kv["id"]}
+
+
+@route("DELETE", r"/api/receipts/(\d+)/bank-kobling")
+def api_bank_kobling_fjern(req, body, rid):
+    with db.tx():
+        db.ex("DELETE FROM bank_manual WHERE receipt_id=?", (rid,))
+        db.ex("DELETE FROM bank_links WHERE receipt_id=?", (rid,))
     return {"ok": True}
 
 

@@ -115,6 +115,8 @@ Etterpå står det **🏦 Felleskonto** (kontoen kjøpet ble betalt fra) på kvi
 
 **Kjøp uten kvittering** kommer også med: dagligvarekjøp som står i banken, men som Matplan ikke har kvittering for, vises i kvitteringslista med merket **Mangler kvittering** og kontoen det ble betalt fra. Velg **🏦 Mangler kvittering** i butikkfilteret for å se bare dem. De telles med i snittet per måned, per butikk, budsjettet og sensoren i Home Assistant, så tallene viser hva dere faktisk bruker på dagligvarer. Fordelingen på mat og annet regnes ut fra kvitteringene som har varelinjer. Når kvitteringen kommer inn – fra Trumf, Rema, e-post eller et bilde – forsvinner linjen av seg selv. Et kjøp regnes som dagligvarer når det har kategorien Dagligvarer i Pengeboka.
 
+**Koble for hånd:** Pengeboka kobler selv når beløpet er likt og datoen er innen fem dager (Oda: åtte), og den bruker kjøpsdatoen i bankteksten når banken fører kjøpet senere. Betaler Oda i to deler, kobles begge delene til kvitteringen. Finner den likevel ikke sammenhengen, åpne kvitteringen og trykk **Koble til bankkjøp** (eller åpne et kjøp med **Mangler kvittering** og trykk **Har kvittering – koble til**). Velg kjøpet – eller flere, hvis betalingen er delt. Koblingen gjelder med en gang, og Pengeboka bruker den foran sin egen gjetting. **Fjern kobling** angrer.
+
 Matplan får aldri se resten av bankdataene, bare dagligvarekjøpene og svaret per kvittering. Koden gir bare tilgang til å lese kvitteringene og melde tilbake bankstatus. Trykk **Lag ny kode** hvis dere vil stenge koblingen.
 
 ## Beredskapslager
