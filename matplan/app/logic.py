@@ -855,7 +855,8 @@ def recipe_text(rec, description=""):
 
 # --- Middagsforslag ----------------------------------------------------------
 
-def _dinner_ctx(days, wish="", progress=None):
+def _dinner_ctx(days, wish="", progress=None, dates=None):
+    """dates: bare disse dagene skal få forslag (ellers alle de første «days» dagene)."""
     if progress:
         progress("Leser middagskalenderen")
     planned, cal_note = {}, None
@@ -880,6 +881,8 @@ def _dinner_ctx(days, wish="", progress=None):
     lines, planned_lines = [], []
     for i in range(days):
         d = today() + timedelta(days=i)
+        if dates and d not in dates:
+            continue
         evs = day_events(d)
         lines.append(f"{d.isoformat()} ({WEEKDAYS[d.weekday()]}):")
         lines.extend(f"  - {e}" for e in evs) if evs else lines.append("  - ingen avtaler")
@@ -1041,10 +1044,29 @@ def _guests_text(gmap):
     return "\n".join(parts)
 
 
-def dinner_plan(days=3, wish="", progress=None, guests=None):
+def _clean_dates(dates):
+    """Valgte enkeltdager innen den neste uka (i dag + 6 dager)."""
+    out = set()
+    t = today()
+    for x in dates or []:
+        try:
+            d = date.fromisoformat(str(x)[:10])
+        except ValueError:
+            continue
+        if 0 <= (d - t).days <= 6:
+            out.add(d)
+    return sorted(out)
+
+
+def dinner_plan(days=3, wish="", progress=None, guests=None, dates=None):
+    sel = _clean_dates(dates)
+    if sel:
+        days = (sel[-1] - today()).days + 1
     days = max(1, min(int(days or 3), 7))
-    gmap = _guests_clean(guests)
-    ctx, planned, day_events, cal_errors, dinner_ent = _dinner_ctx(days, wish, progress)
+    if not sel:
+        sel = [today() + timedelta(days=i) for i in range(days)]
+    gmap = {k: v for k, v in _guests_clean(guests).items() if date.fromisoformat(k) in sel}
+    ctx, planned, day_events, cal_errors, dinner_ent = _dinner_ctx(days, wish, progress, set(sel))
     ctx["guests"] = _guests_text(gmap)
     if progress:
         progress("Spør Claude om forslag")
@@ -1071,7 +1093,16 @@ def dinner_plan(days=3, wish="", progress=None, guests=None):
     res["generert"] = now().isoformat(timespec="minutes")
     res["kalenderfeil"] = cal_errors
     res["middagskalender"] = dinner_ent
+    # bare de valgte dagene, og behold tidligere forslag for andre kommende dager
+    sel_iso = {d.isoformat() for d in sel}
+    res["dager"] = [d for d in res.get("dager", []) if d.get("dato") in sel_iso]
+    old = db.get_setting("last_plan") or {}
+    keep = [d for d in old.get("dager", []) if d.get("dato", "") >= today().isoformat() and d.get("dato") not in sel_iso]
+    if keep:
+        res["dager"] = sorted(res["dager"] + keep, key=lambda d: d.get("dato", ""))
+        res["gjester"] = {**{k: v for k, v in (old.get("gjester") or {}).items() if k not in sel_iso and k >= today().isoformat()}, **gmap}
     res["dager_antall"] = days
+    res["valgte_dager"] = sorted(sel_iso)
     res["onske"] = wish
     db.set_setting("last_plan", res)
     return res

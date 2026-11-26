@@ -524,3 +524,12 @@ details.guests { margin-top: 10px; }
 .bankmerke-linje.ok { font-weight: 700; }
 
 .bankmerke.uten { background: var(--warn-soft); color: var(--warn); margin-left: 0; }
+/* velg enkeltdager */
+.daypick-h { display: flex; justify-content: space-between; align-items: baseline; font-size: 13px; color: var(--muted); font-weight: 600; margin: 0 2px 8px; }
+.daypick-h .linkish { font-size: 13px; }
+.daypick { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 5px; margin-bottom: 4px; }
+.daypick button { display: flex; flex-direction: column; align-items: center; gap: 1px; padding: 7px 0; min-height: 52px; border-radius: 12px; border: 1px solid var(--line); background: var(--bg); min-width: 0; }
+.daypick button b { font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.daypick button small { font-size: 13px; color: var(--muted); }
+.daypick button.sel { background: var(--accent); border-color: var(--accent); color: var(--accent-ink, #fff); }
+.daypick button.sel small { color: inherit; opacity: .85; }

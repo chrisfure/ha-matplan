@@ -173,19 +173,39 @@ function attachAutocomplete(input, opts = {}) {
 }
 
 // ================================================================ MIDDAG
-$$("#days-seg button").forEach((b) =>
-  b.addEventListener("click", () => {
-    $$("#days-seg button").forEach((x) => x.classList.toggle("on", x === b));
-    state.days = +b.dataset.days;
-    renderGuests();
-  })
-);
+// Velg enkeltdager (i dag og seks dager fram) som skal få middagsforslag
+const isoD = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+const weekDays = () => [...Array(7).keys()].map((i) => { const d = new Date(); d.setDate(d.getDate() + i); return d; });
+state.dates = new Set(weekDays().slice(0, 3).map(isoD));
+function renderDayPick() {
+  const plan = state.plan || {};
+  const inCal = new Set((plan.dager || []).filter((d) => d.planlagt).map((d) => d.dato));
+  $("#day-pick").innerHTML = weekDays().map((d, i) => {
+    const k = isoD(d);
+    const wd = d.toLocaleDateString("nb-NO", { weekday: "short" }).replace(".", "");
+    const top = i === 0 ? "I dag" : wd.charAt(0).toUpperCase() + wd.slice(1);
+    return `<button data-day="${k}" class="${state.dates.has(k) ? "sel" : ""}" aria-pressed="${state.dates.has(k)}">
+      <b>${top}</b><small>${d.getDate()}.${inCal.has(k) ? " 📅" : ""}</small></button>`;
+  }).join("");
+  const n = state.dates.size;
+  $("#btn-plan").textContent = n ? `Lag middagsforslag for ${n} dag${n === 1 ? "" : "er"}` : "Velg dager over";
+}
+$("#day-pick").addEventListener("click", (e) => {
+  const b = e.target.closest("button[data-day]"); if (!b) return;
+  state.dates.has(b.dataset.day) ? state.dates.delete(b.dataset.day) : state.dates.add(b.dataset.day);
+  renderDayPick(); renderGuests();
+});
+$$("[data-pick]").forEach((b) => b.addEventListener("click", () => {
+  state.dates = new Set(weekDays().slice(0, +b.dataset.pick).map(isoD));
+  renderDayPick(); renderGuests();
+}));
+renderDayPick();
 
 // Gjester: antall voksne/barn ekstra, og hvilke dager
 state.guests = { adults: 0, children: 0, days: new Set() };
 function renderGuests() {
   const g = state.guests, el = $("#guests");
-  const days = [...Array(state.days).keys()].map((i) => { const d = new Date(); d.setDate(d.getDate() + i); return d; });
+  const days = weekDays().filter((d) => state.dates.has(isoD(d)));
   const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
   [...g.days].forEach((x) => { if (!days.some((d) => iso(d) === x)) g.days.delete(x); });
   const n = g.adults + g.children;
@@ -208,12 +228,13 @@ renderGuests();
 
 $("#btn-plan").addEventListener("click", async () => {
   const btn = $("#btn-plan");
+  if (!state.dates.size) return toast("Velg minst én dag");
   btn.disabled = true;
   const g = state.guests;
   const guests = g.adults + g.children ? [...g.days].map((date) => ({ date, adults: g.adults, children: g.children })) : [];
   if (g.adults + g.children && !guests.length) { btn.disabled = false; return toast("Velg hvilke dager dere har gjester"); }
   try {
-    const plan = await runJob(api("dinner", { body: { days: state.days, wish: $("#wish").value, guests } }), $("#plan-job"));
+    const plan = await runJob(api("dinner", { body: { dates: [...state.dates].sort(), wish: $("#wish").value, guests } }), $("#plan-job"));
     renderPlan(plan);
   } catch (_) {} finally { btn.disabled = false; }
 });
@@ -244,6 +265,7 @@ function planBalance(plan) {
 }
 
 function renderPlan(plan) {
+  state.plan = plan; renderDayPick();
   const el = $("#plan");
   if (!plan || !plan.dager || !plan.dager.length) {
     el.innerHTML = `<div class="card empty">Ingen forslag ennå. Trykk «Lag middagsforslag».</div>`;
@@ -1734,7 +1756,8 @@ function renderGuide() {
       </ul>`, true),
     sec("🍲 Middag", `
       <ol>
-        <li>Velg <b>I dag / 3 dager / Uke</b> og trykk <b>Lag middagsforslag</b>. Skriv gjerne et ønske først.</li>
+        <li><b>Huk av dagene</b> som skal få forslag (i dag og en uke fram – f.eks. bare tirsdag og torsdag), eller trykk <b>Neste 3</b> / <b>Hele uka</b>. Trykk så <b>Lag middagsforslag</b>. Skriv gjerne et ønske først.</li>
+        <li>Forslag for andre dager som allerede er laget, blir stående når du lager nye for enkeltdager. 📅 på en dag betyr at den allerede står i middagskalenderen.</li>
         <li><b>Trykk på et forslag</b> for oppskrift, hva vi har og hva som mangler.</li>
         <li><b>📅 Velg</b> legger middagen inn i Middag-kalenderen. Vil du ha oppskrift, trykker du på retten og «📖 Hent oppskrift» – gjør du det før du velger, kommer oppskriften med i kalenderen.</li>
         <li>Liker du ikke et forslag: <b>🔄 Nytt forslag</b>. Lyst på noe annet: <b>✏️ Egen middag</b>.</li>

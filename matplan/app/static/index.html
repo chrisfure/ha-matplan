@@ -16,11 +16,8 @@
   <!-- MIDDAG -->
   <section id="tab-middag" class="tab active">
     <div class="card controls">
-      <div class="seg" id="days-seg">
-        <button data-days="1">I dag</button>
-        <button data-days="3" class="on">3 dager</button>
-        <button data-days="7">Uke</button>
-      </div>
+      <div class="daypick-h"><span>Lag forslag for</span><span><button class="linkish" data-pick="3">Neste 3</button> · <button class="linkish" data-pick="7">Hele uka</button></span></div>
+      <div class="daypick" id="day-pick"></div>
       <input id="wish" type="text" placeholder="Ønsker? F.eks. «noe med kylling» eller «taco fredag»">
       <div id="guests"></div>
       <button class="primary wide" id="btn-plan">Lag middagsforslag</button>

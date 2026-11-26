@@ -159,6 +159,10 @@ Appen tilpasser seg skjermen. På PC kommer menyen i sidekanten. Middagsdagene v
   - Den **opprettes avslått**, og ingen får varsel før du trykker «Slå på butikkvarsel».
 - **Dashbordkort:** Samme side viser kortet du limer inn i dashbordet (type `todo-list`). Handlelista ligger også alltid under **Gjøremål** i sidemenyen i HA.
 
+## Velge dager
+
+Øverst på **Middag** står de neste sju dagene. Huk av dagene som skal få middagsforslag – for eksempel bare tirsdag og torsdag – eller trykk **Neste 3** eller **Hele uka**. Forslag som allerede er laget for andre kommende dager, blir stående. 📅 betyr at dagen allerede står i middagskalenderen. Gjester velges blant de avkryssede dagene.
+
 ## Middagskalenderen
 
 Matplan bruker kalenderen som heter **Middag** i Home Assistant. Den kan også velges under Mer → Innstillinger.

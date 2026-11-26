@@ -870,7 +870,10 @@ def api_dinner_new(req, body):
     days = (body or {}).get("days", 3)
     wish = (body or {}).get("wish", "")
     guests = (body or {}).get("guests") or []
-    return start_job("dinner", lambda p: logic.dinner_plan(days, wish, p, guests))
+    dates = (body or {}).get("dates") or []
+    if (body or {}).get("dates") is not None and not logic._clean_dates(dates):
+        raise ApiError("Velg minst én dag")
+    return start_job("dinner", lambda p: logic.dinner_plan(days, wish, p, guests, dates))
 
 
 @route("POST", "/api/dinner/choose")
