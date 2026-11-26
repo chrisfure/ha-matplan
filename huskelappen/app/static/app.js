@@ -358,6 +358,7 @@ function renderSettings() {
   $("#s-deadline").checked = !!s.deadline_notify;
   $("#s-deadline-days").value = s.deadline_days;
   $("#s-weather-daily").checked = !!s.weather_daily;
+  $("#s-weather-notify").checked = !!s.weather_notify;
   $("#s-lunch-days").value = s.lunch_days_before;
   $("#s-learn-reject").checked = !!s.learn_reject;
   $("#s-learn-approve").checked = !!s.learn_approve;
@@ -444,6 +445,7 @@ $("#btn-save").onclick = async () => {
       ai_entity: $("#s-ai").value,
       weather_entity: $("#s-weather").value,
       weather_daily: $("#s-weather-daily").checked,
+      weather_notify: $("#s-weather-notify").checked,
       todo_entity: $("#s-todo").value,
       lunch_days_before: Math.max(1, Number($("#s-lunch-days").value) || 2),
       review_weekday: Number($("#s-review-day").value),

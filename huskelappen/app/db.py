@@ -75,6 +75,7 @@ DEFAULT_SETTINGS = {
     "weekly_summary": True,       # oppsummering av uka i søndagsvarselet og på skjermen
     "weather_entity": "",         # f.eks. weather.forecast_hjem
     "weather_daily": True,        # vær og klesråd hver hverdag, også uten beskjeder
+    "weather_notify": False,      # vær og klesråd også i kveldsvarselet (ellers bare på skjermen)
     "todo_entity": "",            # handlelista (samme som Matplan bruker)
     "lunch_days_before": 2,       # legg matpakkemat på lista så mange dager før
     "learn_reject": True,         # avvis automatisk det du har avvist lignende av to ganger

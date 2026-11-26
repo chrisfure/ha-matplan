@@ -523,7 +523,7 @@ def handle_action(action):
 
 def _evening(now, s):
     tomorrow = now.date() + timedelta(days=1)
-    lines = day_lines(tomorrow, markdown=False)
+    lines = day_lines(tomorrow, markdown=False, with_weather=bool(s.get("weather_notify")))
     waiting = [it for it in items("pending") if it["day"] == tomorrow.isoformat()]
     suffix = f"({len(waiting)} forslag for i morgen venter på godkjenning)" if waiting else ""
     if lines:

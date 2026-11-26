@@ -5,7 +5,7 @@ Huskelappen leser beskjeder fra barnehage, skole og aktiviteter: e-post, ukeplan
 - **Du godkjenner først.** Hver søndag kl. 18 (kan endres) får du en oppsummering av uka og et varsel hvis noe venter. Varselet har en knapp, **Godkjenn alle**, så du slipper å åpne appen når alt ser riktig ut. Kommer det noe som gjelder før neste gjennomgang, varsles du med en gang.
 - **Riktig kalender.** Det som gjelder ett barn, havner i det barnets kalender. Gjelder det flere, havner det i kalenderen til hvert av dem.
 - **Veggskjermen.** Fra kl. 19 kvelden før til kl. 09 vises morgendagen øverst på dashbordet: beskjeder, faste ting, vær og klesråd. Søndag kveld vises også resten av uka.
-- **Kveldsvarsel.** Kl. 19 kommer et varsel om hva som skjer i morgen, med vær og klær.
+- **Kveldsvarsel.** Kl. 19 kommer et varsel om hva som skjer i morgen. Vær og klesråd står bare på skjermen, med mindre du krysser av for at de også skal med i varselet.
 - **To mottakere.** Kryss av for at en til (for eksempel partner) også skal få kveldsvarsel, frister og ukesoppsummering. Godkjenning går bare til deg.
 
 Andre barns samtaler, personalmøter og vanlige aktiviteter som samling og utelek tas ikke med.
